@@ -1,0 +1,113 @@
+import { useState } from 'react';
+import { Platform, StyleSheet, TouchableOpacity } from 'react-native';
+import { Text } from 'react-native-paper';
+
+import CreateDeckModal from '@/components/CreateDeckModal';
+import DeckCard from '@/components/DeckCard';
+import { useDecks } from '@/hooks/useDecks';
+import { useThemeColor } from '@/hooks/useThemeColor';
+import { AntDesign } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { ScrollView } from 'react-native-gesture-handler';
+
+interface Deck {
+  id: string;
+  name: string;
+  cardCount: number;
+  createdAt: string;
+}
+
+export default function HomeScreen() {
+  const textColor = useThemeColor({}, 'text');
+  const backgroundColor = useThemeColor({}, 'background');
+  const [modalVisible, setModalVisible] = useState(false);
+  
+  // Use the custom hook for deck management
+  const { decks, loading, saveDeck, deleteDeck } = useDecks();
+
+  const handlePlusPress = () => {
+    console.log('Plus button pressed!'); // Debug log
+    setModalVisible(true);
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+  };
+
+  const handleCreateDeck = async (newDeck: Deck) => {
+    const success = await saveDeck(newDeck);
+    if (success) {
+      setModalVisible(false);
+    }
+  };
+
+
+  return (
+    <>
+      <ScrollView style={{ backgroundColor, padding: 16 }}>
+        {loading ? (
+          <Text variant="bodyLarge" style={{ color: textColor, textAlign: 'center', marginTop: 50 }}>
+            Loading decks...
+          </Text>
+        ) : decks.length === 0 ? (
+          <Text variant="bodyLarge" style={{ color: textColor, textAlign: 'center', marginTop: 50 }}>
+            No decks yet. Create your first flashcard deck!
+          </Text>
+        ) : (
+          decks.map((deck) => (
+            <DeckCard 
+              key={deck.id} 
+              deck={deck}
+              onPress={() => {
+                router.push({ pathname: '/deck/[id]', params: { id: deck.id } })
+              }}
+              onDelete={deleteDeck}
+            />
+          ))
+        )}
+      </ScrollView>
+
+      <TouchableOpacity
+        style={styles.floatingButton}
+        onPress={handlePlusPress}
+        activeOpacity={0.8}
+      >
+        <AntDesign name="plussquare" size={80} color={textColor} />
+      </TouchableOpacity>
+
+      <CreateDeckModal
+        visible={modalVisible}
+        onDismiss={closeModal}
+        onCreateDeck={handleCreateDeck}
+      />
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepContainer: {
+    gap: 8,
+    marginBottom: 8,
+  },
+  reactLogo: {
+    height: 178,
+    width: 290,
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+  },
+  floatingButton: {
+    position: 'absolute',
+    bottom: Platform.select({
+      ios: 100, // Account for tab bar + safe area
+      android: 80,
+      default: 80,
+    }),
+    right: 30,
+  },
+});
