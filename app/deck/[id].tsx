@@ -1,19 +1,17 @@
-import { AntDesign } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, TouchableOpacity } from 'react-native';
+import { useEffect, useLayoutEffect, useState } from 'react';
+import { Alert, StyleSheet } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Button, Card, FAB, Text } from 'react-native-paper';
 
+import AddCardModal from '@/components/AddCardModal';
+import DeleteConfirmationModal from '@/components/DeleteConfirmationModal';
+import EmptyCardState from '@/components/EmptyCardState';
+import FlashCardItem from '@/components/FlashCardItem';
+import { FlashCard, useCards } from '@/hooks/useCards';
 import { useDecks } from '@/hooks/useDecks';
 import { useThemeColor } from '@/hooks/useThemeColor';
-
-interface FlashCard {
-  id: string;
-  front: string;
-  back: string;
-  createdAt: string;
-}
 
 interface Deck {
   id: string;
@@ -26,43 +24,51 @@ interface Deck {
 export default function DeckScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const navigation = useNavigation();
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
-  const iconColor = useThemeColor({}, 'icon');
+  const cardBackgroundColor = useThemeColor({}, 'cardBackground');
   const tintColor = useThemeColor({}, 'tint');
   
-  const { decks, loading } = useDecks();
+  const { decks, loading: decksLoading, updateDeck } = useDecks();
+  const { cards, loading: cardsLoading, saveCard, deleteCard, updateCard } = useCards(id || '');
   const [currentDeck, setCurrentDeck] = useState<Deck | null>(null);
   const [flippedCards, setFlippedCards] = useState<Set<string>>(new Set());
+  const [showAddCardModal, setShowAddCardModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<FlashCard | null>(null);
+  const [editingCard, setEditingCard] = useState<FlashCard | null>(null);
+
+  const loading = decksLoading || cardsLoading;
+
+  // Set the header title dynamically
+  useLayoutEffect(() => {
+    if (currentDeck) {
+      navigation.setOptions({
+        title: currentDeck.name
+      });
+    }
+  }, [currentDeck, navigation]);
 
   useEffect(() => {
     if (id && decks.length > 0) {
       const deck = decks.find(d => d.id === id);
       if (deck) {
-        // Mock cards for now - replace with actual card data
-        const mockCards: FlashCard[] = [
-          {
-            id: '1',
-            front: 'What is React?',
-            back: 'A JavaScript library for building user interfaces',
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: '2',
-            front: 'What is TypeScript?',
-            back: 'A typed superset of JavaScript that compiles to plain JavaScript',
-            createdAt: new Date().toISOString()
-          }
-        ];
-        
         setCurrentDeck({
           ...deck,
-          cards: mockCards,
-          cardCount: mockCards.length
+          cards: cards,
+          cardCount: cards.length
         });
       }
     }
-  }, [id, decks]);
+  }, [id, decks, cards]);
+
+  // Update deck card count when cards change
+  useEffect(() => {
+    if (currentDeck && cards.length !== currentDeck.cardCount) {
+      updateDeck(currentDeck.id, { cardCount: cards.length });
+    }
+  }, [cards.length, currentDeck, updateDeck]);
 
   const handleCardFlip = (cardId: string) => {
     setFlippedCards(prev => {
@@ -77,11 +83,53 @@ export default function DeckScreen() {
   };
 
   const handleAddCard = () => {
-    Alert.alert('Add Card', 'Add new flashcard functionality coming soon!');
+    setEditingCard(null);
+    setShowAddCardModal(true);
+  };
+
+  const handleEditCard = (card: FlashCard) => {
+    setEditingCard(card);
+    setShowAddCardModal(true);
+  };
+
+  const handleDeleteCard = (card: FlashCard) => {
+    setSelectedCard(card);
+    setShowDeleteModal(true);
+  };
+
+  const handleSaveCard = async (front: string, back: string) => {
+    if (editingCard) {
+      return await updateCard(editingCard.id, front, back);
+    } else {
+      return await saveCard(front, back);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (selectedCard) {
+      const success = await deleteCard(selectedCard.id);
+      if (success) {
+        setFlippedCards(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(selectedCard.id);
+          return newSet;
+        });
+      }
+      setSelectedCard(null);
+      return success;
+    }
+    return false;
   };
 
   const handleStartStudy = () => {
-    Alert.alert('Study Mode', 'Study mode functionality coming soon!');
+    if (currentDeck && cards && cards.length > 0) {
+      router.push({
+        pathname: '/study/[id]',
+        params: { id: id }
+      });
+    } else {
+      Alert.alert('No Cards', 'Add some flashcards before starting a study session.');
+    }
   };
 
   if (loading) {
@@ -111,7 +159,7 @@ export default function DeckScreen() {
     <>
       <ScrollView style={{ backgroundColor, padding: 16 }}>
         {/* Header */}
-        <Card style={[styles.headerCard, { backgroundColor }]}>
+        <Card style={[styles.headerCard, { backgroundColor: cardBackgroundColor }]}>
           <Card.Content>
             <Text variant="headlineMedium" style={{ color: textColor, marginBottom: 8 }}>
               {currentDeck.name}
@@ -134,39 +182,17 @@ export default function DeckScreen() {
 
         {currentDeck.cards && currentDeck.cards.length > 0 ? (
           currentDeck.cards.map((card) => (
-            <TouchableOpacity
+            <FlashCardItem
               key={card.id}
-              style={styles.cardContainer}
-              onPress={() => handleCardFlip(card.id)}
-              activeOpacity={0.7}
-            >
-              <Card style={[styles.flashCard, { backgroundColor }]}>
-                <Card.Content style={styles.cardContent}>
-                  <Text variant="bodySmall" style={{ color: textColor, opacity: 0.6, marginBottom: 8 }}>
-                    {flippedCards.has(card.id) ? 'Back' : 'Front'}
-                  </Text>
-                  <Text variant="bodyLarge" style={{ color: textColor, textAlign: 'center' }}>
-                    {flippedCards.has(card.id) ? card.back : card.front}
-                  </Text>
-                  <Text variant="bodySmall" style={{ color: textColor, opacity: 0.4, marginTop: 12 }}>
-                    Tap to flip
-                  </Text>
-                </Card.Content>
-              </Card>
-            </TouchableOpacity>
+              card={card}
+              isFlipped={flippedCards.has(card.id)}
+              onFlip={handleCardFlip}
+              onEdit={handleEditCard}
+              onDelete={handleDeleteCard}
+            />
           ))
         ) : (
-          <Card style={[styles.emptyCard, { backgroundColor }]}>
-            <Card.Content style={styles.emptyCardContent}>
-              <AntDesign name="plus" size={48} color={iconColor} style={{ opacity: 0.3 }} />
-              <Text variant="bodyLarge" style={{ color: textColor, marginTop: 16, textAlign: 'center' }}>
-                No cards yet
-              </Text>
-              <Text variant="bodyMedium" style={{ color: textColor, opacity: 0.6, textAlign: 'center' }}>
-                Add your first flashcard to get started
-              </Text>
-            </Card.Content>
-          </Card>
+          <EmptyCardState />
         )}
       </ScrollView>
 
@@ -176,6 +202,22 @@ export default function DeckScreen() {
         style={[styles.fab, { backgroundColor: tintColor }]}
         onPress={handleAddCard}
         label="Add Card"
+      />
+
+      {/* Modals */}
+      <AddCardModal
+        visible={showAddCardModal}
+        onDismiss={() => setShowAddCardModal(false)}
+        onSaveCard={handleSaveCard}
+        initialCard={editingCard ? { front: editingCard.front, back: editingCard.back } : null}
+        mode={editingCard ? 'edit' : 'add'}
+      />
+
+      <DeleteConfirmationModal
+        visible={showDeleteModal}
+        onDismiss={() => setShowDeleteModal(false)}
+        onConfirm={handleConfirmDelete}
+        deckName={selectedCard?.front || 'this card'}
       />
     </>
   );
@@ -187,24 +229,6 @@ const styles = StyleSheet.create({
   },
   studyButton: {
     marginLeft: 'auto',
-  },
-  cardContainer: {
-    marginBottom: 12,
-  },
-  flashCard: {
-    minHeight: 120,
-  },
-  cardContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: 100,
-  },
-  emptyCard: {
-    marginTop: 32,
-  },
-  emptyCardContent: {
-    alignItems: 'center',
-    paddingVertical: 32,
   },
   fab: {
     position: 'absolute',

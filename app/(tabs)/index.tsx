@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { Platform, StyleSheet, TouchableOpacity } from 'react-native';
-import { Text } from 'react-native-paper';
+import { Platform, StyleSheet } from 'react-native';
+import { FAB, Text } from 'react-native-paper';
 
 import CreateDeckModal from '@/components/CreateDeckModal';
 import DeckCard from '@/components/DeckCard';
 import { useDecks } from '@/hooks/useDecks';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { AntDesign } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { ScrollView } from 'react-native-gesture-handler';
 
@@ -20,6 +19,7 @@ interface Deck {
 export default function HomeScreen() {
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
+  const tintColor = useThemeColor({}, 'tint');
   const [modalVisible, setModalVisible] = useState(false);
   
   // Use the custom hook for deck management
@@ -44,7 +44,11 @@ export default function HomeScreen() {
 
   return (
     <>
-      <ScrollView style={{ backgroundColor, padding: 16 }}>
+      <ScrollView style={{ backgroundColor}}>
+        <Text variant="headlineSmall" style={{ color: textColor, marginBottom: 20, marginTop: 8 }}>
+          My Decks
+        </Text>
+        
         {loading ? (
           <Text variant="bodyLarge" style={{ color: textColor, textAlign: 'center', marginTop: 50 }}>
             Loading decks...
@@ -67,13 +71,12 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      <TouchableOpacity
-        style={styles.floatingButton}
+      <FAB
+        icon="plus"
+        style={[styles.floatingButton, { backgroundColor: tintColor }]}
         onPress={handlePlusPress}
-        activeOpacity={0.8}
-      >
-        <AntDesign name="plussquare" size={80} color={textColor} />
-      </TouchableOpacity>
+        label="Add Deck"
+      />
 
       <CreateDeckModal
         visible={modalVisible}
@@ -103,11 +106,12 @@ const styles = StyleSheet.create({
   },
   floatingButton: {
     position: 'absolute',
+    margin: 16,
+    right: 0,
     bottom: Platform.select({
       ios: 100, // Account for tab bar + safe area
       android: 80,
       default: 80,
     }),
-    right: 30,
   },
 });

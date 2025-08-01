@@ -23,6 +23,21 @@ export default function RootLayout() {
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen 
+            name="deck/[id]" 
+            options={{ 
+              title: 'Deck',
+              headerBackTitle: 'Back'
+            }} 
+          />
+          <Stack.Screen 
+            name="study/[id]" 
+            options={{ 
+              title: 'Study',
+              headerBackTitle: 'Back',
+              presentation: 'modal'
+            }} 
+          />
           <Stack.Screen name="+not-found" />
         </Stack>
         <StatusBar style="auto" />
