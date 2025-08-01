@@ -97,11 +97,11 @@ export default function DeckScreen() {
     setShowDeleteModal(true);
   };
 
-  const handleSaveCard = async (front: string, back: string) => {
+  const handleSaveCard = async (front: string, back: string, generateAudio: boolean = true) => {
     if (editingCard) {
       return await updateCard(editingCard.id, front, back);
     } else {
-      return await saveCard(front, back);
+      return await saveCard(front, back, generateAudio);
     }
   };
 

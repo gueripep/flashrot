@@ -1,3 +1,4 @@
+import { ttsService } from '@/services/ttsService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
@@ -8,6 +9,8 @@ export interface FlashCard {
   back: string;
   createdAt: string;
   deckId: string;
+  questionAudio?: string;
+  answerAudio?: string;
 }
 
 export function useCards(deckId: string) {
@@ -34,7 +37,7 @@ export function useCards(deckId: string) {
     }
   };
 
-  const saveCard = async (front: string, back: string) => {
+  const saveCard = async (front: string, back: string, generateAudio: boolean = true) => {
     try {
       const newCard: FlashCard = {
         id: Date.now().toString(),
@@ -47,6 +50,37 @@ export function useCards(deckId: string) {
       const updatedCards = [...cards, newCard];
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
       setCards(updatedCards);
+
+      // Generate TTS audio in the background
+      if (generateAudio) {
+        try {
+          const audioData = await ttsService.generateCardAudio(
+            newCard.id,
+            newCard.front,
+            newCard.back
+          );
+          
+          // Update the card with audio paths
+          if (audioData.questionAudio || audioData.answerAudio) {
+            const cardWithAudio = {
+              ...newCard,
+              questionAudio: audioData.questionAudio || undefined,
+              answerAudio: audioData.answerAudio || undefined
+            };
+            
+            const cardsWithAudio = updatedCards.map(card => 
+              card.id === newCard.id ? cardWithAudio : card
+            );
+            
+            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(cardsWithAudio));
+            setCards(cardsWithAudio);
+          }
+        } catch (audioError) {
+          console.warn('Failed to generate audio for card:', audioError);
+          // Don't fail the card creation if audio generation fails
+        }
+      }
+      
       return true;
     } catch (error) {
       console.error('Error saving card:', error);
@@ -57,6 +91,9 @@ export function useCards(deckId: string) {
 
   const deleteCard = async (cardId: string) => {
     try {
+      // Delete associated audio files
+      await ttsService.deleteCardAudio(cardId);
+      
       const updatedCards = cards.filter(card => card.id !== cardId);
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
       setCards(updatedCards);

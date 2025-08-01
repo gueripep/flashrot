@@ -1,12 +1,13 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { useTTS } from '@/hooks/useTTS';
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
-import { Button, Modal, Portal, Text, TextInput } from 'react-native-paper';
+import { Button, List, Modal, Portal, Switch, Text, TextInput } from 'react-native-paper';
 
 interface AddCardModalProps {
   visible: boolean;
   onDismiss: () => void;
-  onSaveCard: (front: string, back: string) => Promise<boolean>;
+  onSaveCard: (front: string, back: string, generateAudio?: boolean) => Promise<boolean>;
   initialCard?: { front: string; back: string } | null;
   mode?: 'add' | 'edit';
 }
@@ -21,9 +22,11 @@ export default function AddCardModal({
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
   const primaryColor = useThemeColor({}, 'tint');
+  const { settings } = useTTS();
   
   const [front, setFront] = useState('');
   const [back, setBack] = useState('');
+  const [generateAudio, setGenerateAudio] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -56,7 +59,7 @@ export default function AddCardModal({
     }
 
     setSaving(true);
-    const success = await onSaveCard(front, back);
+    const success = await onSaveCard(front, back, settings.enabled && generateAudio);
     setSaving(false);
     
     if (success) {
@@ -84,8 +87,9 @@ export default function AddCardModal({
           value={front}
           onChangeText={setFront}
           mode="outlined"
-          style={{ marginBottom: 16 }}
+          style={[styles.textInput, { marginBottom: 16 }]}
           multiline
+          numberOfLines={3}
           autoFocus={true}
           theme={{
             colors: {
@@ -95,6 +99,7 @@ export default function AddCardModal({
             }
           }}
           placeholder="Enter the question or prompt..."
+          contentStyle={styles.inputContent}
         />
 
         <TextInput
@@ -102,8 +107,9 @@ export default function AddCardModal({
           value={back}
           onChangeText={setBack}
           mode="outlined"
-          style={{ marginBottom: 24 }}
+          style={[styles.textInput, { marginBottom: 24 }]}
           multiline
+          numberOfLines={3}
           theme={{
             colors: {
               primary: primaryColor,
@@ -112,7 +118,24 @@ export default function AddCardModal({
             }
           }}
           placeholder="Enter the answer or explanation..."
+          contentStyle={styles.inputContent}
         />
+
+        {/* TTS Option */}
+        {settings.enabled && mode === 'add' && (
+          <List.Item
+            title="Generate Audio"
+            description="Create TTS audio for question and answer"
+            left={props => <List.Icon {...props} icon="volume-high" />}
+            right={() => (
+              <Switch
+                value={generateAudio}
+                onValueChange={setGenerateAudio}
+              />
+            )}
+            style={{ marginBottom: 16 }}
+          />
+        )}
 
         <View style={styles.modalButtons}>
           <Button
@@ -152,5 +175,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
     marginTop: 8,
+  },
+  textInput: {
+    minHeight: 80,
+    maxHeight: 120,
+  },
+  inputContent: {
+    paddingTop: 8,
+    paddingBottom: 8,
   },
 });

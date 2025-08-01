@@ -1,13 +1,14 @@
-import { useState } from 'react';
-import { Platform, StyleSheet } from 'react-native';
-import { FAB, Text } from 'react-native-paper';
+import { useNavigation } from '@react-navigation/native';
+import { useLayoutEffect, useState } from 'react';
+import { Platform, ScrollView, StyleSheet } from 'react-native';
+import { FAB, IconButton, Text } from 'react-native-paper';
 
 import CreateDeckModal from '@/components/CreateDeckModal';
 import DeckCard from '@/components/DeckCard';
+import TTSSettingsModal from '@/components/TTSSettingsModal';
 import { useDecks } from '@/hooks/useDecks';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { router } from 'expo-router';
-import { ScrollView } from 'react-native-gesture-handler';
 
 interface Deck {
   id: string;
@@ -17,13 +18,28 @@ interface Deck {
 }
 
 export default function HomeScreen() {
+  const navigation = useNavigation();
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
   const [modalVisible, setModalVisible] = useState(false);
+  const [ttsModalVisible, setTtsModalVisible] = useState(false);
   
   // Use the custom hook for deck management
   const { decks, loading, saveDeck, deleteDeck } = useDecks();
+
+  // Set up header with settings button
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <IconButton
+          icon="cog"
+          iconColor={textColor}
+          onPress={() => setTtsModalVisible(true)}
+        />
+      ),
+    });
+  }, [navigation, textColor]);
 
   const handlePlusPress = () => {
     console.log('Plus button pressed!'); // Debug log
@@ -44,7 +60,7 @@ export default function HomeScreen() {
 
   return (
     <>
-      <ScrollView style={{ backgroundColor}}>
+      <ScrollView style={{ backgroundColor, flex: 1 }} contentContainerStyle={{ flexGrow: 1, padding: 16 }}>
         <Text variant="headlineSmall" style={{ color: textColor, marginBottom: 20, marginTop: 8 }}>
           My Decks
         </Text>
@@ -82,6 +98,11 @@ export default function HomeScreen() {
         visible={modalVisible}
         onDismiss={closeModal}
         onCreateDeck={handleCreateDeck}
+      />
+
+      <TTSSettingsModal
+        visible={ttsModalVisible}
+        onDismiss={() => setTtsModalVisible(false)}
       />
     </>
   );

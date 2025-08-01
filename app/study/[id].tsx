@@ -1,11 +1,13 @@
 import { AntDesign } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useLayoutEffect, useState } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
-import { Button, Card, IconButton, ProgressBar, Text } from 'react-native-paper';
+import { VideoView, useVideoPlayer } from 'expo-video';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
+import { Dimensions, Platform, StyleSheet, View } from 'react-native';
+import { Button, IconButton, ProgressBar, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import StudyCard from '@/components/StudyCard';
 import { FlashCard, useCards } from '@/hooks/useCards';
 import { useDecks } from '@/hooks/useDecks';
 import { useThemeColor } from '@/hooks/useThemeColor';
@@ -18,7 +20,64 @@ interface Deck {
   cards?: FlashCard[];
 }
 
-const { width: screenWidth } = Dimensions.get('window');
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
+// Background Video Component
+const BackgroundVideo = () => {
+  const player = useVideoPlayer(require('@/assets/videos/background-gameplay.webm'), player => {
+    player.loop = true;
+    player.muted = true;
+    
+    // Add a small delay to ensure the player is ready
+    if (Platform.OS === 'web') {
+      // On web, we need to handle autoplay differently
+      setTimeout(() => {
+        try {
+          player.play();
+        } catch (error) {
+          // Autoplay failed, this is expected on web without user interaction
+          console.log('Autoplay prevented by browser policy');
+        }
+      }, 100);
+    } else {
+      player.play();
+    }
+  });
+
+  const handleVideoPress = () => {
+    // On web, allow user to start video manually if autoplay failed
+    if (Platform.OS === 'web') {
+      player.play();
+    }
+  };
+
+  return (
+    <VideoView
+      style={styles.backgroundVideo}
+      player={player}
+      allowsFullscreen={false}
+      allowsPictureInPicture={false}
+      nativeControls={false}
+      contentFit="cover"
+      {...(Platform.OS === 'web' && {
+        onPress: handleVideoPress,
+        pointerEvents: 'auto'
+      })}
+    />
+  );
+};
+
+// Full Screen Container with Background Video
+const FullScreenContainer = ({ children }: { children: React.ReactNode }) => (
+  <View style={styles.fullScreenContainer}>
+    <BackgroundVideo />
+    <SafeAreaView style={styles.safeAreaContainer}>
+      <View style={styles.container}>
+        {children}
+      </View>
+    </SafeAreaView>
+  </View>
+);
 
 export default function StudyScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -26,10 +85,9 @@ export default function StudyScreen() {
   const navigation = useNavigation();
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
-  const cardBackgroundColor = useThemeColor({}, 'cardBackground');
   const tintColor = useThemeColor({}, 'tint');
-  const errorColor = '#ef4444';
-  const successColor = '#22c55e';
+  const errorColor = useThemeColor({}, 'error');
+  const successColor = useThemeColor({}, 'success');
   
   const { decks, loading: decksLoading } = useDecks();
   const { cards, loading: cardsLoading } = useCards(id || '');
@@ -104,19 +162,19 @@ export default function StudyScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor }]}>
+      <FullScreenContainer>
         <View style={styles.centerContent}>
           <Text variant="bodyLarge" style={{ color: textColor }}>
             Loading study session...
           </Text>
         </View>
-      </SafeAreaView>
+      </FullScreenContainer>
     );
   }
 
   if (!currentDeck || !cards || cards.length === 0) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor }]}>
+      <FullScreenContainer>
         <View style={styles.centerContent}>
           <Text variant="bodyLarge" style={{ color: textColor, textAlign: 'center' }}>
             No cards available for studying
@@ -125,7 +183,7 @@ export default function StudyScreen() {
             Go Back
           </Button>
         </View>
-      </SafeAreaView>
+      </FullScreenContainer>
     );
   }
 
@@ -133,7 +191,7 @@ export default function StudyScreen() {
     const accuracy = Math.round((correctCount / cards.length) * 100);
     
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor }]}>
+      <FullScreenContainer>
         <View style={styles.completionContainer}>
           <AntDesign name="checkcircle" size={64} color={successColor} />
           <Text variant="headlineMedium" style={{ color: textColor, marginTop: 16, textAlign: 'center' }}>
@@ -155,12 +213,12 @@ export default function StudyScreen() {
             </Button>
           </View>
         </View>
-      </SafeAreaView>
+      </FullScreenContainer>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor }]}>
+    <FullScreenContainer>
       {/* Progress Bar */}
       <View style={styles.progressContainer}>
         <Text variant="bodyMedium" style={{ color: textColor, marginBottom: 8 }}>
@@ -170,21 +228,14 @@ export default function StudyScreen() {
       </View>
 
       {/* Study Card */}
-      <View style={styles.cardContainer}>
-        <Card style={[styles.studyCard, { backgroundColor: cardBackgroundColor }]} onPress={handleFlip}>
-          <Card.Content style={styles.cardContent}>
-            <Text variant="bodySmall" style={{ color: textColor, opacity: 0.6, marginBottom: 16 }}>
-              {isFlipped ? 'Answer' : 'Question'}
-            </Text>
-            <Text variant="headlineSmall" style={{ color: textColor, textAlign: 'center', lineHeight: 32 }}>
-              {isFlipped ? currentCard?.back : currentCard?.front}
-            </Text>
-            <Text variant="bodySmall" style={{ color: textColor, opacity: 0.4, marginTop: 16 }}>
-              Tap to {isFlipped ? 'see question' : 'reveal answer'}
-            </Text>
-          </Card.Content>
-        </Card>
-      </View>
+      <StudyCard
+        isFlipped={isFlipped}
+        questionText={currentCard?.front || ''}
+        answerText={currentCard?.back || ''}
+        questionAudio={currentCard?.questionAudio}
+        answerAudio={currentCard?.answerAudio}
+        onFlip={handleFlip}
+      />
 
       {/* Action Buttons */}
       {isFlipped && (
@@ -220,14 +271,33 @@ export default function StudyScreen() {
           </Text>
         </View>
       )}
-    </SafeAreaView>
+    </FullScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  fullScreenContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  safeAreaContainer: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
   container: {
     flex: 1,
     padding: 16,
+  },
+  backgroundVideo: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: -1,
+    opacity: 0.3,
   },
   centerContent: {
     flex: 1,
@@ -240,25 +310,6 @@ const styles = StyleSheet.create({
   progressBar: {
     height: 8,
     borderRadius: 4,
-  },
-  cardContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  studyCard: {
-    minHeight: 280,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  cardContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
   },
   actionButtons: {
     marginBottom: 16,

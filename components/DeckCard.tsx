@@ -1,6 +1,6 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { AntDesign } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Card, Text } from 'react-native-paper';
@@ -37,22 +37,41 @@ export default function DeckCard({ deck, onPress, onDelete }: DeckCardProps) {
     const cardBackgroundColor = useThemeColor({}, 'cardBackground');
 
     const SWIPE_THRESHOLD = -100;
-    const GESTURE_THRESHOLD = 10; // Minimum movement to consider it a gesture
-    const MAX_SWIPE_DISTANCE = -180; // Maximum distance the card can be swiped
+    const GESTURE_THRESHOLD = 10;
+    const MAX_SWIPE_DISTANCE = -180;
+
+    // Reset gesture state when modal closes
+    useEffect(() => {
+        if (!showDeleteModal) {
+            const timer = setTimeout(() => {
+                setIsGestureActive(false);
+            }, 200);
+            return () => clearTimeout(timer);
+        }
+    }, [showDeleteModal]);
+
+    // Safe wrapper for runOnJS calls
+    const setGestureActive = (active: boolean) => {
+        'worklet';
+        runOnJS(setIsGestureActive)(active);
+    };
+
+    const showModal = () => {
+        'worklet';
+        runOnJS(setShowDeleteModal)(true);
+    };
 
     const panGesture = Gesture.Pan()
         .onBegin(() => {
-            runOnJS(setIsGestureActive)(false);
+            setGestureActive(false);
         })
         .onChange((event) => {
-            // Only allow left swipe (negative values)
             if (event.translationX < 0) {
-                // Clamp the translation to the maximum swipe distance
                 const clampedTranslation = Math.max(event.translationX, MAX_SWIPE_DISTANCE);
                 translateX.value = clampedTranslation;
-                // Mark as gesture active if moved beyond threshold
+                
                 if (Math.abs(event.translationX) > GESTURE_THRESHOLD) {
-                    runOnJS(setIsGestureActive)(true);
+                    setGestureActive(true);
                 }
             }
         })
@@ -60,20 +79,15 @@ export default function DeckCard({ deck, onPress, onDelete }: DeckCardProps) {
             const wasGestureActive = Math.abs(event.translationX) > GESTURE_THRESHOLD;
             
             if (event.translationX < SWIPE_THRESHOLD) {
-                // Trigger delete action
-                runOnJS(setShowDeleteModal)(true);
+                showModal();
             }
-            // Reset position and scale
+            
             translateX.value = withSpring(0);
             scale.value = withSpring(1);
             
-            // Reset gesture state after a short delay if there was significant movement
-            if (wasGestureActive) {
-                setTimeout(() => {
-                    runOnJS(setIsGestureActive)(false);
-                }, 150);
-            } else {
-                runOnJS(setIsGestureActive)(false);
+            // Use a simpler approach to reset gesture state
+            if (!wasGestureActive) {
+                setGestureActive(false);
             }
         });
 
@@ -92,6 +106,7 @@ export default function DeckCard({ deck, onPress, onDelete }: DeckCardProps) {
 
     const handleDeleteConfirm = () => {
         setShowDeleteModal(false);
+        setIsGestureActive(false);
         if (onDelete) {
             onDelete(deck.id);
         }
@@ -99,13 +114,16 @@ export default function DeckCard({ deck, onPress, onDelete }: DeckCardProps) {
 
     const handleDeleteCancel = () => {
         setShowDeleteModal(false);
+        setIsGestureActive(false);
     };
 
     const handleCardPress = () => {
-        // Only trigger onPress if no gesture was active
-        if (!isGestureActive && onPress) {
-            onPress();
-        }
+        // Add a small delay to ensure gesture state is accurate
+        setTimeout(() => {
+            if (!isGestureActive && onPress) {
+                onPress();
+            }
+        }, 50);
     };
 
     return (
