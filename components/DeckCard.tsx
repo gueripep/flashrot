@@ -5,12 +5,12 @@ import { StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Card, Text } from 'react-native-paper';
 import Animated, {
-    runOnJS,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring
 } from 'react-native-reanimated';
-import DeleteConfirmationModal from './DeleteConfirmationModal';
+import DeleteConfirmationModal from './modals/DeleteConfirmationModal';
 
 interface Deck {
     id: string;

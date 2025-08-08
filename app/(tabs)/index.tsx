@@ -3,9 +3,9 @@ import { useLayoutEffect, useState } from 'react';
 import { Platform, ScrollView, StyleSheet } from 'react-native';
 import { FAB, IconButton, Text } from 'react-native-paper';
 
-import CreateDeckModal from '@/components/CreateDeckModal';
 import DeckCard from '@/components/DeckCard';
-import TTSSettingsModal from '@/components/TTSSettingsModal';
+import CreateDeckModal from '@/components/modals/CreateDeckModal';
+import TTSSettingsModal from '@/components/modals/TTSSettingsModal';
 import { useDecks } from '@/hooks/useDecks';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { router } from 'expo-router';

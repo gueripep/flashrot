@@ -48,44 +48,44 @@ export default function CreateDeckModal({ visible, onDismiss, onCreateDeck }: Cr
       <Modal
         visible={visible}
         onDismiss={handleClose}
-        contentContainerStyle={[styles.modalContent, { backgroundColor }]}
       >
-        <Text variant="headlineSmall" style={{ color: textColor, marginBottom: 24 }}>
-          Add New Deck
-        </Text>
 
-        <TextInput
-          label="Deck name"
-          value={deckName}
-          onChangeText={setDeckName}
-          mode="outlined"
-          style={{ marginBottom: 24 }}
-          autoFocus={true}
-          theme={{
-            colors: {
-              primary: primaryColor,
-              onSurfaceVariant: textColor,
-              outline: textColor + '80',
-            }
-          }}
-        />
-
-        <View style={styles.modalButtons}>
-          <Button
-            mode="text"
-            onPress={handleClose}
-            textColor={primaryColor}
-          >
-            Cancel
-          </Button>
-          <Button
-            mode="contained"
-            onPress={handleCreate}
-            buttonColor={primaryColor}
-            style={{ marginLeft: 12 }}
-          >
-            Create
-          </Button>
+        <View style={[styles.modalContent, { backgroundColor }]}>
+          <Text variant="headlineSmall" style={{ color: textColor, marginBottom: 24 }}>
+            Add New Deck
+          </Text>
+          <TextInput
+            label="Deck name"
+            value={deckName}
+            onChangeText={setDeckName}
+            mode="outlined"
+            style={{ marginBottom: 24 }}
+            autoFocus={true}
+            theme={{
+              colors: {
+                primary: primaryColor,
+                onSurfaceVariant: textColor,
+                outline: textColor + '80',
+              }
+            }}
+          />
+          <View style={styles.modalButtons}>
+            <Button
+              mode="text"
+              onPress={handleClose}
+              textColor={primaryColor}
+            >
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handleCreate}
+              buttonColor={primaryColor}
+              style={{ marginLeft: 12 }}
+            >
+              Create
+            </Button>
+          </View>
         </View>
       </Modal>
     </Portal>
@@ -93,12 +93,17 @@ export default function CreateDeckModal({ visible, onDismiss, onCreateDeck }: Cr
 }
 
 const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
   modalContent: {
-    margin: 20,
-    minWidth: 400,
-    borderRadius: 12,
     padding: 24,
-    alignSelf: 'center',
+    margin: 20,
+    borderRadius: 12,
   },
   modalButtons: {
     flexDirection: 'row',

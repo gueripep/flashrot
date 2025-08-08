@@ -143,6 +143,21 @@ class TTSService {
       throw new Error('TTS service not initialized. Please set API key first.');
     }
 
+    console.log('🎵 Generating TTS for text:', text.substring(0, 50) + '...');
+
+    // First, let's test if the basic API connection works
+    try {
+      console.log('🧪 Testing basic API connection...');
+      const testResult = await this.ai.models.generateContent({
+        model: 'gemini-1.5-flash',
+        contents: [{ role: 'user', parts: [{ text: 'Hello' }] }]
+      });
+      console.log('✅ Basic API test successful');
+    } catch (testError) {
+      console.error('❌ Basic API test failed:', testError);
+      throw new Error('Basic API connection failed. Check your API key and network connection.');
+    }
+
     try {
       const config = {
         temperature: 1,
@@ -168,49 +183,108 @@ class TTSService {
         },
       ];
 
-      const response = await this.ai.models.generateContentStream({
-        model,
-        config,
-        contents,
-      });
+      console.log('🔧 Request config:', JSON.stringify(config, null, 2));
+      console.log('📝 Request contents:', JSON.stringify(contents, null, 2));
+      console.log('🎯 Model:', model);
 
-      for await (const chunk of response) {
-        if (!chunk.candidates || !chunk.candidates[0].content || !chunk.candidates[0].content.parts) {
-          continue;
-        }
-
-        if (chunk.candidates?.[0]?.content?.parts?.[0]?.inlineData) {
-          const inlineData = chunk.candidates[0].content.parts[0].inlineData;
-          let fileExtension = mime.getExtension(inlineData.mimeType || '');
-          let audioBuffer: ArrayBuffer;
-
-          if (!fileExtension) {
-            fileExtension = 'wav';
-            audioBuffer = this.convertToWav(inlineData.data || '', inlineData.mimeType || '');
-          } else {
-            const uint8Array = Uint8Array.from(atob(inlineData.data || ''), c => c.charCodeAt(0));
-            audioBuffer = uint8Array.buffer;
-          }
-
-          // Save to file system
-          const fileName = `tts_${Date.now()}.${fileExtension}`;
-          const filePath = `${FileSystem.documentDirectory}${fileName}`;
-          
-          // Convert ArrayBuffer to base64 for FileSystem
-          const uint8Array = new Uint8Array(audioBuffer);
-          const base64String = btoa(String.fromCharCode(...uint8Array));
-          
-          await FileSystem.writeAsStringAsync(filePath, base64String, {
-            encoding: FileSystem.EncodingType.Base64,
+      console.log('📡 Making API request to Gemini...');
+      let response;
+      try {
+        response = await this.ai.models.generateContentStream({
+          model,
+          config,
+          contents,
+        });
+      } catch (apiError) {
+        console.error('❌ API request failed:', apiError);
+        
+        // Try with a simpler config as fallback
+        console.log('🔄 Trying with simplified config...');
+        const simpleConfig = {
+          responseModalities: ['audio'],
+        };
+        
+        try {
+          response = await this.ai.models.generateContentStream({
+            model: 'gemini-2.5-flash-preview-tts',
+            config: simpleConfig,
+            contents,
           });
-
-          return filePath;
+          console.log('✅ Fallback request succeeded');
+        } catch (fallbackError) {
+          console.error('❌ Fallback request also failed:', fallbackError);
+          throw apiError; // Throw the original error
         }
       }
 
+      console.log('✅ API response received, starting to process stream...');
+      let chunkCount = 0;
+      
+      // Add a timeout to detect if the stream hangs
+      const streamTimeout = setTimeout(() => {
+        console.log('⏰ Stream has been processing for more than 30 seconds...');
+      }, 30000);
+      
+      try {
+        for await (const chunk of response) {
+          chunkCount++;
+          console.log(`📦 Processing chunk ${chunkCount}:`, JSON.stringify(chunk, null, 2));
+          
+          if (!chunk.candidates || !chunk.candidates[0].content || !chunk.candidates[0].content.parts) {
+            console.log('⚠️ Chunk missing expected structure, skipping...');
+            continue;
+          }
+
+          if (chunk.candidates?.[0]?.content?.parts?.[0]?.inlineData) {
+            const inlineData = chunk.candidates[0].content.parts[0].inlineData;
+            let fileExtension = mime.getExtension(inlineData.mimeType || '');
+            let audioBuffer: ArrayBuffer;
+
+            if (!fileExtension) {
+              fileExtension = 'wav';
+              audioBuffer = this.convertToWav(inlineData.data || '', inlineData.mimeType || '');
+            } else {
+              const uint8Array = Uint8Array.from(atob(inlineData.data || ''), c => c.charCodeAt(0));
+              audioBuffer = uint8Array.buffer;
+            }
+
+            // Save to file system
+            const fileName = `tts_${Date.now()}.${fileExtension}`;
+            const filePath = `${FileSystem.documentDirectory}${fileName}`;
+            
+            console.log('💾 Saving audio file to:', filePath);
+            
+            const uint8Array = new Uint8Array(audioBuffer);
+            const base64String = btoa(String.fromCharCode(...uint8Array));
+            
+          
+            await FileSystem.writeAsStringAsync(filePath, base64String, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+
+            console.log('✅ Audio file saved successfully:', fileName);
+            return filePath;
+          }
+        }
+      } finally {
+        clearTimeout(streamTimeout);
+      }
+
+      console.log(`❌ No audio data received from API after processing ${chunkCount} chunks`);
+      console.log('🔍 If chunkCount is 0, the stream never yielded any chunks');
       return null;
-    } catch (error) {
-      console.error('Error generating TTS:', error);
+    } catch (error: any) {
+      // 🔴 DEBUGGER: Catch errors
+      debugger;
+      console.error('❌ Error generating TTS:', error);
+      
+      // Check for quota exceeded error
+      if (error?.message?.includes('429') || error?.message?.includes('quota') || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+        const quotaError = new Error('TTS quota exceeded. You have reached the daily limit for TTS requests. Please try again tomorrow or upgrade your plan.');
+        quotaError.name = 'QuotaExceededError';
+        throw quotaError;
+      }
+      
       throw error;
     }
   }
@@ -218,11 +292,23 @@ class TTSService {
   async generateCardAudio(cardId: string, questionText: string, answerText: string): Promise<{ questionAudio: string | null; answerAudio: string | null }> {
     await this.initializeAPI();
     
+    console.log('🔊 Starting audio generation for card:', cardId);
+    console.log('📝 Question:', questionText.substring(0, 30) + '...');
+    console.log('📝 Answer:', answerText.substring(0, 30) + '...');
+    console.log('🔑 API Key exists:', !!this.apiKey);
+    console.log('🤖 AI instance exists:', !!this.ai);
+    
     try {
       const [questionAudio, answerAudio] = await Promise.all([
         this.generateTTS(questionText),
         this.generateTTS(answerText)
       ]);
+
+      console.log('🎵 Question audio generated:', questionAudio ? '✅' : '❌');
+      console.log('🎵 Answer audio generated:', answerAudio ? '✅' : '❌');
+      
+      if (questionAudio) console.log('📁 Question audio path:', questionAudio);
+      if (answerAudio) console.log('📁 Answer audio path:', answerAudio);
 
       // Store audio file paths in AsyncStorage for the card
       const audioData = {
@@ -232,10 +318,12 @@ class TTSService {
       };
 
       await AsyncStorage.setItem(`card_audio_${cardId}`, JSON.stringify(audioData));
+      console.log('💾 Audio metadata saved for card:', cardId);
 
       return { questionAudio, answerAudio };
     } catch (error) {
-      console.error('Error generating card audio:', error);
+      console.error('❌ Error generating card audio:', error);
+      console.error('📋 Error details:', JSON.stringify(error, null, 2));
       return { questionAudio: null, answerAudio: null };
     }
   }
@@ -279,6 +367,63 @@ class TTSService {
     } catch (error) {
       console.error('Error deleting card audio:', error);
     }
+  }
+
+  // Debug method to inspect audio files
+  async debugAudioFiles(): Promise<void> {
+    try {
+      console.log('🔍 DEBUG: Checking audio files...');
+      console.log('📁 Document Directory:', FileSystem.documentDirectory);
+      
+      if (!FileSystem.documentDirectory) {
+        console.log('❌ No document directory available');
+        return;
+      }
+
+      const files = await FileSystem.readDirectoryAsync(FileSystem.documentDirectory);
+      const audioFiles = files.filter(file => file.startsWith('tts_'));
+      
+      console.log('🎵 Found', audioFiles.length, 'TTS audio files:');
+      audioFiles.forEach(file => {
+        console.log('  📄', file);
+      });
+
+      // Check AsyncStorage for audio metadata
+      const keys = await AsyncStorage.getAllKeys();
+      const audioKeys = keys.filter(key => key.startsWith('card_audio_'));
+      
+      console.log('💾 Found', audioKeys.length, 'audio metadata entries:');
+      for (const key of audioKeys) {
+        const data = await AsyncStorage.getItem(key);
+        if (data) {
+          const audioData = JSON.parse(data);
+          console.log('  🔑', key, ':', {
+            questionAudio: audioData.questionAudio ? '✅' : '❌',
+            answerAudio: audioData.answerAudio ? '✅' : '❌',
+            generatedAt: audioData.generatedAt
+          });
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error debugging audio files:', error);
+    }
+  }
+
+  // Helper method to check if error is quota-related
+  isQuotaError(error: any): boolean {
+    const errorString = JSON.stringify(error).toLowerCase();
+    return errorString.includes('429') || 
+           errorString.includes('quota') || 
+           errorString.includes('resource_exhausted') ||
+           errorString.includes('generativelanguage.googleapis.com/generate_content_free_tier_requests');
+  }
+
+  // Get user-friendly error message
+  getErrorMessage(error: any): string {
+    if (this.isQuotaError(error)) {
+      return 'TTS quota exceeded. You have reached the daily limit of 15 TTS requests. Please try again tomorrow or upgrade your plan for higher limits.';
+    }
+    return error.message || 'An unexpected error occurred during TTS generation.';
   }
 }
 

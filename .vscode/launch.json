@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Android (Expo)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/@expo/cli/build/bin/cli",
+      "args": ["start", "--android"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "name": "Debug iOS (Expo)", 
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/@expo/cli/build/bin/cli",
+      "args": ["start", "--ios"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "name": "Attach to Metro",
+      "type": "node",
+      "request": "attach",
+      "port": 8081,
+      "address": "localhost",
+      "localRoot": "${workspaceFolder}",
+      "remoteRoot": "${workspaceFolder}",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}

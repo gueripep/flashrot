@@ -5,10 +5,10 @@ import { Alert, StyleSheet } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Button, Card, FAB, Text } from 'react-native-paper';
 
-import AddCardModal from '@/components/AddCardModal';
-import DeleteConfirmationModal from '@/components/DeleteConfirmationModal';
 import EmptyCardState from '@/components/EmptyCardState';
 import FlashCardItem from '@/components/FlashCardItem';
+import AddCardModal from '@/components/modals/AddCardModal';
+import DeleteConfirmationModal from '@/components/modals/DeleteConfirmationModal';
 import { FlashCard, useCards } from '@/hooks/useCards';
 import { useDecks } from '@/hooks/useDecks';
 import { useThemeColor } from '@/hooks/useThemeColor';
