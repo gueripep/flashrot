@@ -7,10 +7,13 @@ import { Dimensions, Platform, StyleSheet, View } from 'react-native';
 import { Button, IconButton, ProgressBar, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import StudyCard from '@/components/StudyCard';
+import AudioPlayer from '@/components/AudioPlayer';
+import SubtitleDisplay from '@/components/SubtitleDisplay';
 import { FlashCard, useCards } from '@/hooks/useCards';
 import { useDecks } from '@/hooks/useDecks';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { useTTS } from '@/hooks/useTTS';
+import { ttsService } from '@/services/ttsService';
 
 interface Deck {
   id: string;
@@ -88,6 +91,7 @@ export default function StudyScreen() {
   const tintColor = useThemeColor({}, 'tint');
   const errorColor = useThemeColor({}, 'error');
   const successColor = useThemeColor({}, 'success');
+  const { settings } = useTTS();
   
   const { decks, loading: decksLoading } = useDecks();
   const { cards, loading: cardsLoading } = useCards(id || '');
@@ -96,6 +100,9 @@ export default function StudyScreen() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [studyComplete, setStudyComplete] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
+  const [audioPosition, setAudioPosition] = useState(0);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [timingData, setTimingData] = useState<any>(null);
 
   const loading = decksLoading || cardsLoading;
 
@@ -128,11 +135,46 @@ export default function StudyScreen() {
     }
   }, [id, decks, cards]);
 
+  // Load timing data when card changes
+  useEffect(() => {
+    const loadTimingData = async () => {
+      const currentCard = cards[currentCardIndex];
+      if (!currentCard) return;
+
+      setTimingData(null);
+      
+      try {
+        // Get timing data for the current audio using local files
+        const currentAudio = isFlipped ? currentCard.answerAudio : currentCard.questionAudio;
+        if (currentAudio) {
+          const timing = await ttsService.getLocalTimingData(currentAudio);
+          if (timing) {
+            setTimingData(timing);
+            console.log('📊 Loaded local timing data:', {
+              text: timing.text,
+              wordCount: timing.word_timings?.length || 0,
+              firstWord: timing.word_timings?.[0],
+              lastWord: timing.word_timings?.[timing.word_timings?.length - 1]
+            });
+          } else {
+            console.log('⚠️ No timing data available for this card');
+          }
+        }
+      } catch (error) {
+        console.log('⚠️ Error loading timing data:', error);
+      }
+    };
+
+    loadTimingData();
+  }, [currentCardIndex, isFlipped, cards]);
+
   const currentCard = cards[currentCardIndex];
   const progress = cards.length > 0 ? (currentCardIndex / cards.length) : 0;
 
   const handleFlip = () => {
     setIsFlipped(!isFlipped);
+    setAudioPosition(0);
+    setIsAudioPlaying(false);
   };
 
   const handleAnswer = (isCorrect: boolean) => {
@@ -144,6 +186,8 @@ export default function StudyScreen() {
     if (cards.length > 0 && currentCardIndex < cards.length - 1) {
       setCurrentCardIndex(prev => prev + 1);
       setIsFlipped(false);
+      setAudioPosition(0);
+      setIsAudioPlaying(false);
     } else {
       setStudyComplete(true);
     }
@@ -154,6 +198,8 @@ export default function StudyScreen() {
     setIsFlipped(false);
     setStudyComplete(false);
     setCorrectCount(0);
+    setAudioPosition(0);
+    setIsAudioPlaying(false);
   };
 
   const handleFinish = () => {
@@ -227,15 +273,44 @@ export default function StudyScreen() {
         <ProgressBar progress={progress} color={tintColor} style={styles.progressBar} />
       </View>
 
-      {/* Study Card */}
-      <StudyCard
-        isFlipped={isFlipped}
-        questionText={currentCard?.front || ''}
-        answerText={currentCard?.back || ''}
-        questionAudio={currentCard?.questionAudio}
-        answerAudio={currentCard?.answerAudio}
-        onFlip={handleFlip}
+      {/* Subtitle Display */}
+      <SubtitleDisplay
+        text={isFlipped ? currentCard?.back || '' : currentCard?.front || ''}
+        timingData={timingData}
+        currentTime={audioPosition}
+        isPlaying={isAudioPlaying}
+        showFullText={!settings.enabled || !timingData}
       />
+
+      {/* Audio Player */}
+      {settings.enabled && (isFlipped ? currentCard?.answerAudio : currentCard?.questionAudio) && (
+        <View style={styles.audioContainer}>
+          <AudioPlayer
+            audioUri={isFlipped ? currentCard?.answerAudio : currentCard?.questionAudio}
+            autoPlay={settings.autoPlay}
+            size={24}
+            onPositionChange={setAudioPosition}
+            onPlayStateChange={setIsAudioPlaying}
+          />
+          <Text variant="bodySmall" style={{ color: textColor, textAlign: 'center', marginTop: 8 }}>
+            {isFlipped ? 'Answer Audio' : 'Question Audio'}
+          </Text>
+        </View>
+      )}
+
+      {/* Flip Button */}
+      {!isFlipped && (
+        <View style={styles.flipContainer}>
+          <Button
+            mode="contained"
+            onPress={handleFlip}
+            style={[styles.flipButton, { backgroundColor: tintColor }]}
+            labelStyle={{ color: 'white' }}
+          >
+            Reveal Answer
+          </Button>
+        </View>
+      )}
 
       {/* Action Buttons */}
       {isFlipped && (
@@ -339,5 +414,20 @@ const styles = StyleSheet.create({
   },
   button: {
     marginVertical: 4,
+  },
+  audioContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  flipContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  flipButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 8,
   },
 });

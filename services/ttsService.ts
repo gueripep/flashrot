@@ -29,9 +29,7 @@ class TTSService {
     default: 'http://192.168.1.3:8000',
   })!;
 
-  constructor() {
-    // No API initialization required for locarl server.
-  }
+  constructor() { }
 
   // Kept for compatibility (no-op)
   async setApiKey(_apiKey: string) {
@@ -80,11 +78,32 @@ class TTSService {
       const localFileName = `tts_${Date.now()}.mp3`;
       const filePath = `${FileSystem.documentDirectory}${localFileName}`;
 
-      console.log('� Downloading audio from:', downloadUrl);
+      console.log('📥 Downloading audio from:', downloadUrl);
       const downloadResult = await FileSystem.downloadAsync(downloadUrl, filePath);
 
       if (downloadResult.status >= 200 && downloadResult.status < 300) {
         console.log('✅ Audio downloaded:', downloadResult.uri);
+        
+        // Step 3: Download and save timing data if available
+        if (synthesizeResult.timing_filename) {
+          try {
+            const timingUrl = `${this.baseUrl}/tts/timing/${synthesizeResult.timing_filename}`;
+            const localTimingFileName = localFileName.replace('.mp3', '_timing.json');
+            const timingFilePath = `${FileSystem.documentDirectory}${localTimingFileName}`;
+
+            console.log('📥 Downloading timing data from:', timingUrl);
+            const timingDownloadResult = await FileSystem.downloadAsync(timingUrl, timingFilePath);
+
+            if (timingDownloadResult.status >= 200 && timingDownloadResult.status < 300) {
+              console.log('✅ Timing data saved locally:', timingDownloadResult.uri);
+            } else {
+              console.log('⚠️ Timing data download failed, but audio is available');
+            }
+          } catch (timingError) {
+            console.log('⚠️ Failed to download timing data:', timingError);
+          }
+        }
+        
         return downloadResult.uri;
       }
 
@@ -123,7 +142,38 @@ class TTSService {
     }
   }
 
-  // Download timing information for a specific audio file
+  // Get local timing information for an audio file
+  async getLocalTimingData(audioUri: string): Promise<any | null> {
+    try {
+      if (!audioUri) return null;
+      
+      // Extract filename from the audio path and create timing filename
+      const audioFileName = audioUri.split('/').pop();
+      if (!audioFileName) return null;
+      
+      const timingFileName = audioFileName.replace('.mp3', '_timing.json');
+      const timingFilePath = `${FileSystem.documentDirectory}${timingFileName}`;
+      
+      // Check if timing file exists
+      const fileInfo = await FileSystem.getInfoAsync(timingFilePath);
+      if (!fileInfo.exists) {
+        console.log('📊 No local timing data found for:', audioFileName);
+        return null;
+      }
+      
+      // Read and parse timing data
+      const timingContent = await FileSystem.readAsStringAsync(timingFilePath);
+      const timingData = JSON.parse(timingContent);
+      console.log('📊 Loaded local timing data for:', audioFileName);
+      
+      return timingData;
+    } catch (error) {
+      console.error('❌ Error loading local timing data:', error);
+      return null;
+    }
+  }
+
+  // Download timing information for a specific audio file (fallback method)
   async downloadTimingInfo(filename: string): Promise<any | null> {
     try {
       const timingUrl = `${this.baseUrl}/tts/timing/${filename}`;
@@ -186,10 +236,26 @@ class TTSService {
       if (questionAudio) {
         await FileSystem.deleteAsync(questionAudio, { idempotent: true });
         console.log('🗑️ Deleted question audio:', questionAudio);
+        
+        // Also delete corresponding timing file
+        const timingFileName = questionAudio.split('/').pop()?.replace('.mp3', '_timing.json');
+        if (timingFileName) {
+          const timingPath = `${FileSystem.documentDirectory}${timingFileName}`;
+          await FileSystem.deleteAsync(timingPath, { idempotent: true });
+          console.log('🗑️ Deleted question timing data:', timingPath);
+        }
       }
       if (answerAudio) {
         await FileSystem.deleteAsync(answerAudio, { idempotent: true });
         console.log('🗑️ Deleted answer audio:', answerAudio);
+        
+        // Also delete corresponding timing file
+        const timingFileName = answerAudio.split('/').pop()?.replace('.mp3', '_timing.json');
+        if (timingFileName) {
+          const timingPath = `${FileSystem.documentDirectory}${timingFileName}`;
+          await FileSystem.deleteAsync(timingPath, { idempotent: true });
+          console.log('🗑️ Deleted answer timing data:', timingPath);
+        }
       }
 
       // Clean up any legacy AsyncStorage entries (backward compatibility)
@@ -211,10 +277,16 @@ class TTSService {
       }
 
       const files = await FileSystem.readDirectoryAsync(FileSystem.documentDirectory);
-      const audioFiles = files.filter((file) => file.startsWith('tts_'));
+      const audioFiles = files.filter((file) => file.startsWith('tts_') && file.endsWith('.mp3'));
+      const timingFiles = files.filter((file) => file.startsWith('tts_') && file.endsWith('_timing.json'));
 
       console.log('🎵 Found', audioFiles.length, 'TTS audio files:');
       audioFiles.forEach((file) => {
+        console.log('  📄', file);
+      });
+
+      console.log('📊 Found', timingFiles.length, 'TTS timing files:');
+      timingFiles.forEach((file) => {
         console.log('  📄', file);
       });
 
