@@ -12,24 +12,20 @@ export function useTTS() {
   const [settings, setSettings] = useState<TTSSettings>({
     enabled: false,
     autoPlay: true,
-    apiKeySet: false
+    apiKeySet: true, // No API key required for local server
   });
   const [loading, setLoading] = useState(true);
 
   const loadSettings = async () => {
     try {
       setLoading(true);
-      const [settingsString, apiKey] = await Promise.all([
-        AsyncStorage.getItem('tts_settings'),
-        ttsService.getApiKey()
-      ]);
-
+      const settingsString = await AsyncStorage.getItem('tts_settings');
       const savedSettings = settingsString ? JSON.parse(settingsString) : {};
-      
+
       setSettings({
         enabled: savedSettings.enabled ?? false,
         autoPlay: savedSettings.autoPlay ?? true,
-        apiKeySet: !!apiKey
+        apiKeySet: true, // Always true with local server
       });
     } catch (error) {
       console.error('Error loading TTS settings:', error);
@@ -41,10 +37,7 @@ export function useTTS() {
   const updateSettings = async (newSettings: Partial<TTSSettings>) => {
     try {
       const updatedSettings = { ...settings, ...newSettings };
-      
-      // Don't save apiKeySet to storage, it's derived from actual key presence
-      const { apiKeySet, ...settingsToSave } = updatedSettings;
-      
+      const { apiKeySet, ...settingsToSave } = updatedSettings; // don't persist apiKeySet
       await AsyncStorage.setItem('tts_settings', JSON.stringify(settingsToSave));
       setSettings(updatedSettings);
     } catch (error) {
@@ -52,9 +45,10 @@ export function useTTS() {
     }
   };
 
-  const setApiKey = async (apiKey: string) => {
+  // No-op for local server, but keep API the same
+  const setApiKey = async (_apiKey: string) => {
     try {
-      await ttsService.setApiKey(apiKey);
+      await ttsService.setApiKey(_apiKey);
       setSettings(prev => ({ ...prev, apiKeySet: true, enabled: true }));
       return true;
     } catch (error) {
@@ -63,10 +57,11 @@ export function useTTS() {
     }
   };
 
+  // No-op for local server; do not disable TTS
   const clearApiKey = async () => {
     try {
       await AsyncStorage.removeItem('gemini_api_key');
-      setSettings(prev => ({ ...prev, apiKeySet: false, enabled: false }));
+      setSettings(prev => ({ ...prev, apiKeySet: true }));
     } catch (error) {
       console.error('Error clearing API key:', error);
     }
@@ -82,6 +77,6 @@ export function useTTS() {
     updateSettings,
     setApiKey,
     clearApiKey,
-    refreshSettings: loadSettings
+    refreshSettings: loadSettings,
   };
 }

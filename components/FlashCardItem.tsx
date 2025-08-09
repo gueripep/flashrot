@@ -1,8 +1,14 @@
-import { useRef, useState } from 'react';
+import { AntDesign } from '@expo/vector-icons';
+import { useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Card, IconButton, Menu, Text } from 'react-native-paper';
+import { GestureDetector } from 'react-native-gesture-handler';
+import { Card, Text } from 'react-native-paper';
+import Animated from 'react-native-reanimated';
 
+import AudioPlayer from '@/components/AudioPlayer';
+import DeleteConfirmationModal from '@/components/modals/DeleteConfirmationModal';
 import { FlashCard } from '@/hooks/useCards';
+import { useSwipeGesture } from '@/hooks/useSwipeGesture';
 import { useThemeColor } from '@/hooks/useThemeColor';
 
 interface FlashCardItemProps {
@@ -22,80 +28,142 @@ export default function FlashCardItem({
 }: FlashCardItemProps) {
   const textColor = useThemeColor({}, 'text');
   const cardBackgroundColor = useThemeColor({}, 'cardBackground');
-  const iconColor = useThemeColor({}, 'icon');
   
-  const [menuVisible, setMenuVisible] = useState(false);
-  const menuAnchor = useRef(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  const handleEdit = () => {
-    setMenuVisible(false);
-    onEdit(card);
+  const {
+    panGesture,
+    isGestureActive,
+    animatedStyle,
+    leftActionStyle,
+    rightActionStyle,
+    leftBackgroundStyle,
+    rightBackgroundStyle,
+    resetGestureState,
+  } = useSwipeGesture({
+    onSwipeLeft: () => setShowDeleteModal(true),
+    onSwipeRight: () => onEdit(card),
+    enableVerticalGestureCheck: true,
+  });
+
+  const handleDeleteConfirm = () => {
+    setShowDeleteModal(false);
+    resetGestureState();
+    onDelete(card);
   };
 
-  const handleDelete = () => {
-    setMenuVisible(false);
-    onDelete(card);
+  const handleDeleteCancel = () => {
+    setShowDeleteModal(false);
+    resetGestureState();
+  };
+
+  const handleCardPress = () => {
+    // Add a small delay to ensure gesture state is accurate
+    setTimeout(() => {
+      if (!isGestureActive) {
+        onFlip(card.id);
+      }
+    }, 50);
   };
 
   return (
     <>
-      <Card style={[styles.flashCard, { backgroundColor: cardBackgroundColor }]}>
-        <Card.Content style={styles.cardContent}>
-          <TouchableOpacity
-            style={styles.cardTouchable}
-            onPress={() => onFlip(card.id)}
-            activeOpacity={0.7}
-          >
-            <Text variant="bodySmall" style={{ color: textColor, opacity: 0.6, marginBottom: 8 }}>
-              {isFlipped ? 'Back' : 'Front'}
-            </Text>
-            <Text variant="bodyLarge" style={{ color: textColor, textAlign: 'center', lineHeight: 24 }}>
-              {isFlipped ? card.back : card.front}
-            </Text>
-            <Text variant="bodySmall" style={{ color: textColor, opacity: 0.4, marginTop: 12 }}>
-              Tap to flip
-            </Text>
-          </TouchableOpacity>
-          
-          <View style={styles.menuContainer}>
-            <Menu
-              visible={menuVisible}
-              onDismiss={() => setMenuVisible(false)}
-              anchor={
-                <IconButton
-                  ref={menuAnchor}
-                  icon="dots-vertical"
-                  iconColor={iconColor}
-                  size={20}
-                  onPress={() => {
-                    console.log('Menu button pressed for card:', card.id); // Debug log
-                    setMenuVisible(true);
-                  }}
-                />
-              }
-            >
-              <Menu.Item
-                onPress={handleEdit}
-                title="Edit"
-                leadingIcon="pencil"
-              />
-              <Menu.Item
-                onPress={handleDelete}
-                title="Delete"
-                leadingIcon="delete"
-              />
-            </Menu>
-          </View>
-        </Card.Content>
-      </Card>
+      <View style={styles.cardContainer}>
+        {/* Delete background (right side) */}
+        <Animated.View style={[styles.deleteBackground, leftBackgroundStyle]}>
+          <Animated.View style={leftActionStyle}>
+            <AntDesign name="delete" size={24} color="white" />
+          </Animated.View>
+        </Animated.View>
+
+        {/* Edit background (left side) */}
+        <Animated.View style={[styles.editBackground, rightBackgroundStyle]}>
+          <Animated.View style={rightActionStyle}>
+            <AntDesign name="edit" size={24} color="white" />
+          </Animated.View>
+        </Animated.View>
+
+        {/* Card with gesture */}
+        <GestureDetector gesture={panGesture}>
+          <Animated.View style={animatedStyle}>
+            <Card style={[styles.flashCard, { backgroundColor: cardBackgroundColor }]}>
+              <Card.Content style={styles.cardContent}>
+                <TouchableOpacity
+                  style={styles.cardTouchable}
+                  onPress={handleCardPress}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.cardHeader}>
+                    <Text variant="bodySmall" style={{ color: textColor, opacity: 0.6, marginBottom: 8 }}>
+                      {isFlipped ? 'Back' : 'Front'}
+                    </Text>
+                    {/* Show audio player if TTS is available for current side */}
+                    {((isFlipped && card.answerAudio) || (!isFlipped && card.questionAudio)) && (
+                      <View style={styles.audioPlayerContainer}>
+                        <AudioPlayer 
+                          audioUri={isFlipped ? card.answerAudio : card.questionAudio}
+                          size={20}
+                        />
+                      </View>
+                    )}
+                  </View>
+                  <Text variant="bodyLarge" style={{ color: textColor, textAlign: 'center', lineHeight: 24 }}>
+                    {isFlipped ? card.back : card.front}
+                  </Text>
+                  <Text variant="bodySmall" style={{ color: textColor, opacity: 0.4, marginTop: 12 }}>
+                    Tap to flip • Swipe left to delete • Swipe right to edit
+                  </Text>
+                </TouchableOpacity>
+              </Card.Content>
+            </Card>
+          </Animated.View>
+        </GestureDetector>
+      </View>
+
+      <DeleteConfirmationModal
+        visible={showDeleteModal}
+        onDismiss={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        deckName={card.front}
+      />
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  cardContainer: {
+    marginBottom: 12,
+    position: 'relative',
+    width: '100%',
+  },
+  deleteBackground: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: '50%',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    backgroundColor: '#dc3545',
+    borderRadius: 12,
+    paddingRight: 20,
+  },
+  editBackground: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '50%',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    backgroundColor: '#007bff',
+    borderRadius: 12,
+    paddingLeft: 20,
+  },
   flashCard: {
     minHeight: 120,
-    marginBottom: 12,
+    borderRadius: 12,
+    width: '100%',
   },
   cardContent: {
     justifyContent: 'space-between',
@@ -109,10 +177,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 100,
   },
-  menuContainer: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    zIndex: 1,
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 8,
+  },
+  audioPlayerContainer: {
+    zIndex: 2,
   },
 });

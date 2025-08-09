@@ -1,15 +1,11 @@
+import { useSwipeGesture } from '@/hooks/useSwipeGesture';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { AntDesign } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { Card, Text } from 'react-native-paper';
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring
-} from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import DeleteConfirmationModal from './modals/DeleteConfirmationModal';
 
 interface Deck {
@@ -28,85 +24,34 @@ interface DeckCardProps {
 export default function DeckCard({ deck, onPress, onDelete }: DeckCardProps) {
     const textColor = useThemeColor({}, 'text');
     const backgroundColor = useThemeColor({}, 'background');
+    const cardBackgroundColor = useThemeColor({}, 'cardBackground');
     const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-    const translateX = useSharedValue(0);
-    const scale = useSharedValue(1);
-    const [isGestureActive, setIsGestureActive] = useState(false);
-
-    const cardBackgroundColor = useThemeColor({}, 'cardBackground');
-
-    const SWIPE_THRESHOLD = -100;
-    const GESTURE_THRESHOLD = 10;
-    const MAX_SWIPE_DISTANCE = -180;
+    const {
+        panGesture,
+        isGestureActive,
+        animatedStyle,
+        leftActionStyle,
+        leftBackgroundStyle,
+        resetGestureState,
+    } = useSwipeGesture({
+        onSwipeLeft: () => setShowDeleteModal(true),
+        enableVerticalGestureCheck: false, // DeckCard doesn't need vertical gesture check
+    });
 
     // Reset gesture state when modal closes
     useEffect(() => {
         if (!showDeleteModal) {
             const timer = setTimeout(() => {
-                setIsGestureActive(false);
+                resetGestureState();
             }, 200);
             return () => clearTimeout(timer);
         }
-    }, [showDeleteModal]);
-
-    // Safe wrapper for runOnJS calls
-    const setGestureActive = (active: boolean) => {
-        'worklet';
-        runOnJS(setIsGestureActive)(active);
-    };
-
-    const showModal = () => {
-        'worklet';
-        runOnJS(setShowDeleteModal)(true);
-    };
-
-    const panGesture = Gesture.Pan()
-        .onBegin(() => {
-            setGestureActive(false);
-        })
-        .onChange((event) => {
-            if (event.translationX < 0) {
-                const clampedTranslation = Math.max(event.translationX, MAX_SWIPE_DISTANCE);
-                translateX.value = clampedTranslation;
-                
-                if (Math.abs(event.translationX) > GESTURE_THRESHOLD) {
-                    setGestureActive(true);
-                }
-            }
-        })
-        .onEnd((event) => {
-            const wasGestureActive = Math.abs(event.translationX) > GESTURE_THRESHOLD;
-            
-            if (event.translationX < SWIPE_THRESHOLD) {
-                showModal();
-            }
-            
-            translateX.value = withSpring(0);
-            scale.value = withSpring(1);
-            
-            // Use a simpler approach to reset gesture state
-            if (!wasGestureActive) {
-                setGestureActive(false);
-            }
-        });
-
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [
-            { translateX: translateX.value },
-            { scale: scale.value }
-        ],
-    }));
-
-    const deleteIconStyle = useAnimatedStyle(() => ({
-        transform: [
-            { translateX: translateX.value / 2 }
-        ],
-    }));
+    }, [showDeleteModal, resetGestureState]);
 
     const handleDeleteConfirm = () => {
         setShowDeleteModal(false);
-        setIsGestureActive(false);
+        resetGestureState();
         if (onDelete) {
             onDelete(deck.id);
         }
@@ -114,7 +59,7 @@ export default function DeckCard({ deck, onPress, onDelete }: DeckCardProps) {
 
     const handleDeleteCancel = () => {
         setShowDeleteModal(false);
-        setIsGestureActive(false);
+        resetGestureState();
     };
 
     const handleCardPress = () => {
@@ -130,11 +75,11 @@ export default function DeckCard({ deck, onPress, onDelete }: DeckCardProps) {
         <>
             <View style={styles.cardContainer}>
                 {/* Delete background */}
-                <View style={styles.deleteBackground}>
-                    <Animated.View style={deleteIconStyle}>
+                <Animated.View style={[styles.deleteBackground, leftBackgroundStyle]}>
+                    <Animated.View style={leftActionStyle}>
                         <AntDesign name="delete" size={24} color="white" />
                     </Animated.View>
-                </View>
+                </Animated.View>
 
                 {/* Card with gesture */}
                 <GestureDetector gesture={panGesture}>
