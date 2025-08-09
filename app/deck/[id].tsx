@@ -1,16 +1,19 @@
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useLayoutEffect, useState } from 'react';
-import { Alert, StyleSheet } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
-import { Button, Card, FAB, Text } from 'react-native-paper';
+import { Button, Card, Chip, FAB, Text } from 'react-native-paper';
 
+import DebugPanel from '@/components/DebugPanel';
 import EmptyCardState from '@/components/EmptyCardState';
 import FlashCardItem from '@/components/FlashCardItem';
+import StudyStatsCard from '@/components/StudyStatsCard';
 import AddCardModal from '@/components/modals/AddCardModal';
 import DeleteConfirmationModal from '@/components/modals/DeleteConfirmationModal';
 import { FlashCard, useCards } from '@/hooks/useCards';
 import { useDecks } from '@/hooks/useDecks';
+import { useFSRSStudy } from '@/hooks/useFSRSStudy';
 import { useThemeColor } from '@/hooks/useThemeColor';
 
 interface Deck {
@@ -29,15 +32,24 @@ export default function DeckScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   const cardBackgroundColor = useThemeColor({}, 'cardBackground');
   const tintColor = useThemeColor({}, 'tint');
+  const successColor = useThemeColor({}, 'success');
+  const warningColor = '#fd7e14';
   
   const { decks, loading: decksLoading, updateDeck } = useDecks();
-  const { cards, loading: cardsLoading, saveCard, deleteCard, updateCard } = useCards(id || '');
+  const { cards, loading: cardsLoading, saveCard, deleteCard, updateCard, refreshCards } = useCards(id || '');
+  const { 
+    studyStats, 
+    hasCardsForReview,
+    loading: fsrsLoading 
+  } = useFSRSStudy(id || '', cards);
+  
   const [currentDeck, setCurrentDeck] = useState<Deck | null>(null);
   const [flippedCards, setFlippedCards] = useState<Set<string>>(new Set());
   const [showAddCardModal, setShowAddCardModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedCard, setSelectedCard] = useState<FlashCard | null>(null);
   const [editingCard, setEditingCard] = useState<FlashCard | null>(null);
+  const [cardsForReview, setCardsForReview] = useState<boolean>(false);
 
   const loading = decksLoading || cardsLoading;
 
@@ -69,6 +81,18 @@ export default function DeckScreen() {
       updateDeck(currentDeck.id, { cardCount: cards.length });
     }
   }, [cards.length, currentDeck, updateDeck]);
+
+  // Check for cards due for review
+  useEffect(() => {
+    const checkForReviewCards = async () => {
+      if (id && cards.length > 0) {
+        const hasDueCards = await hasCardsForReview();
+        setCardsForReview(hasDueCards);
+      }
+    };
+    
+    checkForReviewCards();
+  }, [id, cards, hasCardsForReview]);
 
   const handleCardFlip = (cardId: string) => {
     setFlippedCards(prev => {
@@ -121,11 +145,14 @@ export default function DeckScreen() {
     return false;
   };
 
-  const handleStartStudy = () => {
+  const handleStartStudy = (mode: 'review' | 'all' | 'new' = 'review') => {
     if (currentDeck && cards && cards.length > 0) {
       router.push({
         pathname: '/study/[id]',
-        params: { id: id }
+        params: { 
+          id: id,
+          mode: mode
+        }
       });
     } else {
       Alert.alert('No Cards', 'Add some flashcards before starting a study session.');
@@ -158,22 +185,70 @@ export default function DeckScreen() {
   return (
     <>
       <ScrollView style={{ backgroundColor, padding: 16 }}>
+        <DebugPanel deckId={id || ''} allCards={cards} />
+
         {/* Header */}
         <Card style={[styles.headerCard, { backgroundColor: cardBackgroundColor }]}>
           <Card.Content>
-            <Text variant="headlineMedium" style={{ color: textColor, marginBottom: 8 }}>
-              {currentDeck.name}
-            </Text>
-            <Text variant="bodyMedium" style={{ color: textColor, opacity: 0.7 }}>
-              {currentDeck.cardCount} {currentDeck.cardCount === 1 ? 'card' : 'cards'}
-            </Text>
+            <View style={styles.headerContent}>
+              <View style={styles.titleSection}>
+                <Text variant="headlineMedium" style={{ color: textColor, marginBottom: 8 }}>
+                  {currentDeck.name}
+                </Text>
+                <Text variant="bodyMedium" style={{ color: textColor, opacity: 0.7 }}>
+                  {currentDeck.cardCount} {currentDeck.cardCount === 1 ? 'card' : 'cards'}
+                </Text>
+              </View>
+              
+              {/* Study Status */}
+              {cardsForReview && (
+                <Chip 
+                  icon="clock-alert-outline" 
+                  style={{ backgroundColor: warningColor + '20' }}
+                  textStyle={{ color: warningColor, fontWeight: '600' }}
+                >
+                  Cards due for review
+                </Chip>
+              )}
+            </View>
           </Card.Content>
-          <Card.Actions>
-            <Button mode="contained" onPress={handleStartStudy} style={styles.studyButton}>
-              Start Studying
+          
+          <Card.Actions style={styles.studyActions}>
+            <Button 
+              mode="outlined" 
+              onPress={() => handleStartStudy('all')}
+              style={[styles.studyButton, { borderColor: tintColor }]}
+              textColor={tintColor}
+            >
+              Study All
             </Button>
+            
+            {cardsForReview && (
+              <Button 
+                mode="contained" 
+                onPress={() => handleStartStudy('review')}
+                style={[styles.studyButton, { backgroundColor: warningColor }]}
+                textColor="white"
+              >
+                Review Due
+              </Button>
+            )}
+            
+            {!cardsForReview && (
+              <Button 
+                mode="contained" 
+                onPress={() => handleStartStudy('new')}
+                style={[styles.studyButton, { backgroundColor: tintColor }]}
+                textColor="white"
+              >
+                Start Studying
+              </Button>
+            )}
           </Card.Actions>
         </Card>
+
+        {/* Study Statistics */}
+        <StudyStatsCard stats={studyStats} loading={fsrsLoading} />
 
         {/* Cards List */}
         <Text variant="titleMedium" style={{ color: textColor, marginTop: 24, marginBottom: 16 }}>
@@ -225,10 +300,25 @@ export default function DeckScreen() {
 
 const styles = StyleSheet.create({
   headerCard: {
+    marginBottom: 16,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: 8,
   },
+  titleSection: {
+    flex: 1,
+  },
+  studyActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    paddingTop: 8,
+  },
   studyButton: {
-    marginLeft: 'auto',
+    minWidth: 120,
   },
   fab: {
     position: 'absolute',

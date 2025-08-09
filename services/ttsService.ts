@@ -164,7 +164,6 @@ class TTSService {
       // Read and parse timing data
       const timingContent = await FileSystem.readAsStringAsync(timingFilePath);
       const timingData = JSON.parse(timingContent);
-      console.log('📊 Loaded local timing data for:', audioFileName);
       
       return timingData;
     } catch (error) {

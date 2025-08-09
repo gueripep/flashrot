@@ -8,9 +8,11 @@ import { Button, IconButton, ProgressBar, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AudioPlayer from '@/components/AudioPlayer';
+import FSRSRatingButtons from '@/components/FSRSRatingButtons';
 import SubtitleDisplay from '@/components/SubtitleDisplay';
 import { FlashCard, useCards } from '@/hooks/useCards';
 import { useDecks } from '@/hooks/useDecks';
+import { Rating, useFSRSStudy } from '@/hooks/useFSRSStudy';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { useTTS } from '@/hooks/useTTS';
 import { ttsService } from '@/services/ttsService';
@@ -83,7 +85,7 @@ const FullScreenContainer = ({ children }: { children: React.ReactNode }) => (
 );
 
 export default function StudyScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, mode } = useLocalSearchParams<{ id: string; mode?: string }>();
   const router = useRouter();
   const navigation = useNavigation();
   const textColor = useThemeColor({}, 'text');
@@ -95,6 +97,26 @@ export default function StudyScreen() {
   
   const { decks, loading: decksLoading } = useDecks();
   const { cards, loading: cardsLoading } = useCards(id || '');
+  
+  // FSRS Integration
+  const {
+    studyCards,
+    currentCard: fsrsCurrentCard,
+    isStudyActive,
+    currentCardIndex: fsrsCardIndex,
+    progress: fsrsProgress,
+    cardsRemaining,
+    isLastCard,
+    startStudySession,
+    endStudySession,
+    reviewCard,
+    nextCard: fsrsNextCard,
+    getReviewOptions,
+    getRatingLabels,
+    loading: fsrsLoading
+  } = useFSRSStudy(id || '', cards);
+  
+  // Local state for study interface
   const [currentDeck, setCurrentDeck] = useState<Deck | null>(null);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -103,8 +125,12 @@ export default function StudyScreen() {
   const [audioPosition, setAudioPosition] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [timingData, setTimingData] = useState<any>(null);
+  const [showRatingButtons, setShowRatingButtons] = useState(false);
+  const [reviewOptions, setReviewOptions] = useState<any>(null);
+  const [reviewStartTime, setReviewStartTime] = useState<Date | null>(null);
+  const [useFSRS, setUseFSRS] = useState(false);
 
-  const loading = decksLoading || cardsLoading;
+  const loading = decksLoading || cardsLoading || fsrsLoading;
 
   // Set the header title dynamically
   useLayoutEffect(() => {
@@ -135,10 +161,22 @@ export default function StudyScreen() {
     }
   }, [id, decks, cards]);
 
+  // Initialize FSRS study session if mode is specified
+  useEffect(() => {
+    if (mode && id && cards.length > 0 && !isStudyActive) {
+      setUseFSRS(true);
+      const studyMode = (mode as 'review' | 'all' | 'new') || 'review';
+      startStudySession({ mode: studyMode });
+    } else if (!mode) {
+      setUseFSRS(false);
+    }
+  }, [id, cards, mode, isStudyActive, startStudySession]);
+
   // Load timing data when card changes
   useEffect(() => {
     const loadTimingData = async () => {
-      const currentCard = cards[currentCardIndex];
+      // Use FSRS current card if FSRS is active, otherwise use regular cards
+      const currentCard = useFSRS ? fsrsCurrentCard : cards[currentCardIndex];
       if (!currentCard) return;
 
       setTimingData(null);
@@ -150,12 +188,6 @@ export default function StudyScreen() {
           const timing = await ttsService.getLocalTimingData(currentAudio);
           if (timing) {
             setTimingData(timing);
-            console.log('📊 Loaded local timing data:', {
-              text: timing.text,
-              wordCount: timing.word_timings?.length || 0,
-              firstWord: timing.word_timings?.[0],
-              lastWord: timing.word_timings?.[timing.word_timings?.length - 1]
-            });
           } else {
             console.log('⚠️ No timing data available for this card');
           }
@@ -166,23 +198,79 @@ export default function StudyScreen() {
     };
 
     loadTimingData();
-  }, [currentCardIndex, isFlipped, cards]);
+  }, [useFSRS ? fsrsCardIndex : currentCardIndex, isFlipped, cards, fsrsCurrentCard, useFSRS]);
 
-  const currentCard = cards[currentCardIndex];
-  const progress = cards.length > 0 ? (currentCardIndex / cards.length) : 0;
+  // Get current card and progress based on mode
+  const currentCard = useFSRS ? fsrsCurrentCard : cards[currentCardIndex];
+  const progress = useFSRS ? fsrsProgress : (cards.length > 0 ? (currentCardIndex / cards.length) : 0);
+  const totalCards = useFSRS ? studyCards.length : cards.length;
+  const currentIndex = useFSRS ? fsrsCardIndex : currentCardIndex;
 
   const handleFlip = () => {
     setIsFlipped(!isFlipped);
     setAudioPosition(0);
     setIsAudioPlaying(false);
+    
+    if (!isFlipped && useFSRS) {
+      // Card was flipped to answer side in FSRS mode
+      setShowRatingButtons(true);
+      setReviewStartTime(new Date());
+      loadReviewOptions();
+    }
+  };
+
+  const loadReviewOptions = async () => {
+    if (currentCard && useFSRS) {
+      const options = await getReviewOptions(currentCard.id);
+      setReviewOptions(options);
+    }
+  };
+
+  const handleFSRSRating = async (rating: Rating) => {
+    if (!currentCard || !reviewStartTime || !useFSRS) return;
+
+    const timeTaken = (new Date().getTime() - reviewStartTime.getTime()) / 1000;
+    const wasCorrect = rating >= Rating.Good;
+    
+    // Record the review with FSRS
+    const success = await reviewCard(rating, timeTaken);
+    
+    if (success) {
+      if (wasCorrect) {
+        setCorrectCount(prev => prev + 1);
+      }
+
+      // Move to next card or end session
+      if (isLastCard) {
+        setStudyComplete(true);
+      } else {
+        const hasNext = fsrsNextCard();
+        if (hasNext) {
+          // Reset state for next card
+          setIsFlipped(false);
+          setShowRatingButtons(false);
+          setReviewOptions(null);
+          setAudioPosition(0);
+          setIsAudioPlaying(false);
+          setReviewStartTime(null);
+        } else {
+          setStudyComplete(true);
+        }
+      }
+    }
   };
 
   const handleAnswer = (isCorrect: boolean) => {
+    if (useFSRS) {
+      // In FSRS mode, use rating buttons instead
+      return;
+    }
+    
     if (isCorrect) {
       setCorrectCount(prev => prev + 1);
     }
 
-    // Move to next card
+    // Move to next card (legacy mode)
     if (cards.length > 0 && currentCardIndex < cards.length - 1) {
       setCurrentCardIndex(prev => prev + 1);
       setIsFlipped(false);
@@ -194,7 +282,17 @@ export default function StudyScreen() {
   };
 
   const handleRestart = () => {
-    setCurrentCardIndex(0);
+    if (useFSRS) {
+      // Restart FSRS session
+      const studyMode = (mode as 'review' | 'all' | 'new') || 'review';
+      startStudySession({ mode: studyMode });
+      setShowRatingButtons(false);
+      setReviewOptions(null);
+      setReviewStartTime(null);
+    } else {
+      setCurrentCardIndex(0);
+    }
+    
     setIsFlipped(false);
     setStudyComplete(false);
     setCorrectCount(0);
@@ -234,7 +332,8 @@ export default function StudyScreen() {
   }
 
   if (studyComplete) {
-    const accuracy = Math.round((correctCount / cards.length) * 100);
+    const totalStudied = useFSRS ? studyCards.length : cards.length;
+    const accuracy = Math.round((correctCount / totalStudied) * 100);
     
     return (
       <FullScreenContainer>
@@ -244,11 +343,17 @@ export default function StudyScreen() {
             Study Complete!
           </Text>
           <Text variant="bodyLarge" style={{ color: textColor, marginTop: 8, textAlign: 'center' }}>
-            You got {correctCount} out of {cards.length} cards correct
+            You got {correctCount} out of {totalStudied} cards correct
           </Text>
           <Text variant="titleLarge" style={{ color: tintColor, marginTop: 16, textAlign: 'center' }}>
             {accuracy}% Accuracy
           </Text>
+          
+          {useFSRS && (
+            <Text variant="bodyMedium" style={{ color: textColor, marginTop: 8, textAlign: 'center', opacity: 0.8 }}>
+              {useFSRS && cardsRemaining > 0 && `${cardsRemaining} cards scheduled for later review`}
+            </Text>
+          )}
           
           <View style={styles.completionButtons}>
             <Button mode="outlined" onPress={handleRestart} style={styles.button}>
@@ -268,7 +373,8 @@ export default function StudyScreen() {
       {/* Progress Bar */}
       <View style={styles.progressContainer}>
         <Text variant="bodyMedium" style={{ color: textColor, marginBottom: 8 }}>
-          Card {currentCardIndex + 1} of {cards.length}
+          Card {currentIndex + 1} of {totalCards}
+          {useFSRS && cardsRemaining > 0 && ` • ${cardsRemaining} remaining`}
         </Text>
         <ProgressBar progress={progress} color={tintColor} style={styles.progressBar} />
       </View>
@@ -313,7 +419,7 @@ export default function StudyScreen() {
       )}
 
       {/* Action Buttons */}
-      {isFlipped && (
+      {isFlipped && !useFSRS && (
         <View style={styles.actionButtons}>
           <Text variant="bodyMedium" style={{ color: textColor, textAlign: 'center', marginBottom: 16 }}>
             How well did you know this?
@@ -336,6 +442,17 @@ export default function StudyScreen() {
               Got It!
             </Button>
           </View>
+        </View>
+      )}
+
+      {/* FSRS Rating Buttons */}
+      {isFlipped && useFSRS && showRatingButtons && (
+        <View style={styles.fsrsContainer}>
+          <FSRSRatingButtons
+            onRate={handleFSRSRating}
+            reviewOptions={reviewOptions}
+            showPreview={true}
+          />
         </View>
       )}
 
@@ -387,6 +504,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   actionButtons: {
+    marginBottom: 16,
+  },
+  fsrsContainer: {
     marginBottom: 16,
   },
   buttonRow: {

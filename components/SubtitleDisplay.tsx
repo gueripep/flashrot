@@ -1,176 +1,287 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 
+// Custom component for text with strong border
+const BorderedText = ({ children, style, isHighlighted = false, ...props }: any) => {
+    const textColor = 'white';
+    const borderColor = '#000000';
+    const tintColor = useThemeColor({}, 'tint');
+    const getOutlineShadow = (color: string, width: number) => {
+        return {
+            textShadowColor: color,
+            textShadowOffset: { width, height: 0 },
+            textShadowRadius: 1,
+        };
+    };
+
+    return (
+        <View style={{
+            backgroundColor: isHighlighted ? tintColor : 'transparent',
+            borderRadius: 12,
+            paddingHorizontal: 4,
+            paddingVertical: 2,
+            overflow: 'hidden', // Force clipping to border radius
+            alignSelf: 'flex-start', // Ensure proper sizing
+        }}>
+            {/* Main text */}
+            <Text {...props} style={[
+                style,
+                {
+                    color: textColor,
+                    ...getOutlineShadow(borderColor, -2),
+                    ...getOutlineShadow(borderColor, 2),
+
+                    // Only apply text shadow for non-highlighted words, with no offset
+                    // ...(isHighlighted ? {} : {
+                        
+                    // }),
+                }
+            ]}>
+                {children}
+            </Text>
+        </View>
+    );
+};
+
 interface WordTiming {
-  word: string;
-  start_time: number;
-  duration?: number | null;
-  end_time?: number;
-  word_index?: number;
+    word: string;
+    start_time: number;
+    duration?: number | null;
+    end_time?: number;
+    word_index?: number;
 }
 
 interface TimingData {
-  text: string;
-  word_timings: WordTiming[];
-  audio_file: string;
+    text: string;
+    word_timings: WordTiming[];
+    audio_file: string;
 }
 
 interface SubtitleDisplayProps {
-  text: string;
-  timingData?: TimingData | null;
-  currentTime: number;
-  isPlaying: boolean;
-  showFullText?: boolean;
+    text: string;
+    timingData?: TimingData | null;
+    currentTime: number;
+    isPlaying: boolean;
+    showFullText?: boolean;
 }
 
 export default function SubtitleDisplay({
-  text,
-  timingData,
-  currentTime,
-  isPlaying,
-  showFullText = false
+    text,
+    timingData,
+    currentTime,
+    isPlaying,
+    showFullText = false
 }: SubtitleDisplayProps) {
-  const textColor = useThemeColor({}, 'text');
-  const tintColor = useThemeColor({}, 'tint');
-  const backgroundColor = useThemeColor({}, 'background');
-  const cardBackgroundColor = useThemeColor({}, 'cardBackground');
-  
-  const [highlightedWords, setHighlightedWords] = useState<Set<number>>(new Set());
+    const textColor = useThemeColor({}, 'text');
+    const tintColor = useThemeColor({}, 'tint');
+    const backgroundColor = useThemeColor({}, 'background');
+    const cardBackgroundColor = useThemeColor({}, 'cardBackground');
 
-  useEffect(() => {
-    if (!timingData || !isPlaying) {
-      setHighlightedWords(new Set());
-      return;
-    }
+    const [highlightedWords, setHighlightedWords] = useState<Set<number>>(new Set());
+    const [isReady, setIsReady] = useState(false);
+    const previousHighlightedWords = useRef<Set<number>>(new Set());
 
-    // Debug: Log current time and timing data
-    console.log('🕐 Current time:', currentTime);
-    console.log('📊 Timing data available:', timingData.word_timings?.length || 0, 'words');
+    useEffect(() => {
+        // We are ready to display subtitles if we should show the full text,
+        // or if we have valid timing data.
+        const ready = showFullText || (!!timingData && !!timingData.word_timings && timingData.word_timings.length > 0);
+        
+        // A small delay helps prevent a "flash" of content if data arrives quickly.
+        const timer = setTimeout(() => setIsReady(ready), 50);
+        
+        return () => clearTimeout(timer);
+    }, [timingData, showFullText]);
 
-    // Find which words should be highlighted based on current time
-    const highlighted = new Set<number>();
-    timingData.word_timings?.forEach((wordTiming, index) => {
-      // Calculate end time from start_time + duration, or use end_time if available
-      const endTime = wordTiming.end_time || 
-        (wordTiming.duration ? wordTiming.start_time + wordTiming.duration : wordTiming.start_time + 0.5);
-      
-      const isHighlighted = currentTime >= wordTiming.start_time && currentTime <= endTime;
-      if (isHighlighted) {
-        highlighted.add(index);
-        console.log(`🔥 Highlighting word ${index}: "${wordTiming.word}" (${wordTiming.start_time.toFixed(2)}s - ${endTime.toFixed(2)}s) at time ${currentTime.toFixed(2)}s`);
-      }
-    });
-    
-    setHighlightedWords(highlighted);
-  }, [currentTime, timingData, isPlaying]);
+    useEffect(() => {
+        if (!timingData || !isPlaying) {
+            setHighlightedWords(new Set());
+            previousHighlightedWords.current = new Set();
+            return;
+        }
 
-  const renderTextWithHighlight = () => {
-    if (!timingData || showFullText) {
-      return (
-        <Text variant="headlineMedium" style={[styles.fullText, { color: textColor }]}>
-          {text}
-        </Text>
-      );
-    }
+        // Find which words should be highlighted based on current time
+        const highlighted = new Set<number>();
+        timingData.word_timings?.forEach((wordTiming, index) => {
+            // Calculate end time from start_time + duration, or use end_time if available
+            const endTime = wordTiming.end_time ||
+                (wordTiming.duration ? wordTiming.start_time + wordTiming.duration : wordTiming.start_time + 0.5);
 
-    // Debug: Log timing data structure
-    console.log('🔍 Rendering with timing data:', {
-      wordCount: timingData.word_timings?.length || 0,
-      highlightedCount: highlightedWords.size,
-      highlightedIndices: Array.from(highlightedWords)
-    });
+            const isHighlighted = currentTime >= wordTiming.start_time && currentTime <= endTime;
+            if (isHighlighted) {
+                highlighted.add(index);
+                // Only log if this word wasn't previously highlighted
+                if (!previousHighlightedWords.current.has(index)) {
+                    console.log(`🔥 Highlighting word ${index}: "${wordTiming.word}" (${wordTiming.start_time.toFixed(2)}s - ${endTime.toFixed(2)}s) at time ${currentTime.toFixed(2)}s`);
+                }
+            }
+        });
+
+        // Update the previous state reference
+        previousHighlightedWords.current = new Set(highlighted);
+        setHighlightedWords(highlighted);
+    }, [currentTime, timingData, isPlaying]);
+
+    const getCurrentSubtitleChunk = () => {
+        if (!timingData || !timingData.word_timings || timingData.word_timings.length === 0) {
+            return { words: [], startIndex: 0 };
+        }
+
+        const maxWordsPerChunk = 4;
+        const wordTimings = timingData.word_timings;
+        
+        // Find the current word being spoken
+        let currentWordIndex = -1;
+        for (let i = 0; i < wordTimings.length; i++) {
+            const wordTiming = wordTimings[i];
+            const endTime = wordTiming.end_time || 
+                (wordTiming.duration ? wordTiming.start_time + wordTiming.duration : wordTiming.start_time + 0.5);
+            
+            if (currentTime >= wordTiming.start_time && currentTime <= endTime) {
+                currentWordIndex = i;
+                break;
+            }
+        }
+
+        // If no current word is found, find the closest upcoming word
+        if (currentWordIndex === -1) {
+            for (let i = 0; i < wordTimings.length; i++) {
+                if (currentTime < wordTimings[i].start_time) {
+                    currentWordIndex = i;
+                    break;
+                }
+            }
+        }
+
+        // If still no word found, use the last chunk
+        if (currentWordIndex === -1) {
+            currentWordIndex = wordTimings.length - 1;
+        }
+
+        // Find the chunk that contains the current word
+        const chunkStartIndex = Math.floor(currentWordIndex / maxWordsPerChunk) * maxWordsPerChunk;
+        const chunkEndIndex = Math.min(chunkStartIndex + maxWordsPerChunk, wordTimings.length);
+        
+        return {
+            words: wordTimings.slice(chunkStartIndex, chunkEndIndex),
+            startIndex: chunkStartIndex
+        };
+    };
+
+    const renderTextWithHighlight = () => {
+        // Don't render anything until we're ready
+        if (!isReady) {
+            return null;
+        }
+
+        // If timing data is not available, render nothing.
+        if (!timingData || !timingData.word_timings || timingData.word_timings.length === 0) {
+            return null;
+        }
+
+        const { words: currentChunk, startIndex } = getCurrentSubtitleChunk();
+
+        // If we have timing data but no current chunk, show the first chunk
+        if (currentChunk.length === 0 && timingData.word_timings.length > 0) {
+            const firstChunk = timingData.word_timings.slice(0, Math.min(4, timingData.word_timings.length));
+            return (
+                <View style={styles.wordContainer}>
+                    {firstChunk.map((wordTiming, index) => (
+                        <BorderedText
+                            key={index}
+                            variant="headlineLarge"
+                            style={styles.word}
+                            isHighlighted={false}
+                            tintColor={tintColor}
+                        >
+                            {wordTiming.word.toUpperCase()}
+                        </BorderedText>
+                    ))}
+                </View>
+            );
+        }
+
+        return (
+            <View style={styles.wordContainer}>
+                {currentChunk.map((wordTiming, index) => {
+                    const globalIndex = startIndex + index;
+                    const isHighlighted = highlightedWords.has(globalIndex);
+                    return (
+                        <BorderedText
+                            key={globalIndex}
+                            variant="headlineLarge"
+                            style={styles.word}
+                            isHighlighted={isHighlighted}
+                            tintColor={tintColor}
+                        >
+                            {wordTiming.word.toUpperCase()}
+                        </BorderedText>
+                    );
+                })}
+            </View>
+        );
+    };
 
     return (
-      <View style={styles.wordContainer}>
-        {timingData.word_timings?.map((wordTiming, index) => {
-          const isHighlighted = highlightedWords.has(index);
-          return (
-            <Text
-              key={index}
-              variant="headlineMedium"
-              style={[
-                styles.word,
-                { 
-                  color: isHighlighted ? 'white' : textColor,
-                  backgroundColor: isHighlighted ? tintColor : 'transparent',
-                }
-              ]}
-            >
-              {wordTiming.word}
-            </Text>
-          );
-        })}
-      </View>
+        <View style={styles.container}>
+            <View style={styles.subtitleContainer}>
+                {renderTextWithHighlight()}
+                {timingData && !showFullText && (
+                    <Text variant="bodySmall" style={[styles.hint, { color: 'white' }]}>
+                        {isPlaying ? 'Following audio...' : 'Press play to see highlighted words'}
+                    </Text>
+                )}
+            </View>
+        </View>
     );
-  };
-
-  return (
-    <View style={[styles.container, { backgroundColor: cardBackgroundColor }]}>
-      <View style={styles.subtitleContainer}>
-        {renderTextWithHighlight()}
-        {timingData && !showFullText && (
-          <Text variant="bodySmall" style={[styles.hint, { color: textColor }]}>
-            {isPlaying ? 'Following audio...' : 'Press play to see highlighted words'}
-          </Text>
-        )}
-      </View>
-    </View>
-  );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    marginBottom: 24,
-    borderRadius: 12,
-    padding: 20,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-  },
-  subtitleContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 200,
-  },
-  wordContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  word: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 32,
-    fontSize: 20,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  fullText: {
-    textAlign: 'center',
-    lineHeight: 36,
-    fontWeight: '600',
-    fontSize: 22,
-    paddingHorizontal: 16,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  hint: {
-    opacity: 0.6,
-    marginTop: 16,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
+    container: {
+        flex: 1,
+        justifyContent: 'center',
+        marginBottom: 24,
+    },
+    subtitleContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 240,
+    },
+    wordContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+    },
+    word: {
+        fontWeight: '900',
+        textAlign: 'center',
+        lineHeight: 36,
+        fontSize: 24,
+        fontFamily: Platform.OS === 'ios' ? 'Helvetica-Bold' : 'sans-serif-black',
+    },
+    highlightedWord: {
+        // This style is now handled by BorderedText component
+    },
+    fullText: {
+        textAlign: 'center',
+        lineHeight: 52,
+        fontWeight: '900',
+        fontSize: 36,
+        fontFamily: Platform.OS === 'ios' ? 'Helvetica-Bold' : 'sans-serif-black',
+        paddingHorizontal: 16,
+    },
+    hint: {
+        color: 'white',
+        opacity: 0.8,
+        marginTop: 16,
+        textAlign: 'center',
+        fontStyle: 'italic',
+        fontWeight: '600',
+        textShadowColor: '#000000',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 2,
+    },
 });
