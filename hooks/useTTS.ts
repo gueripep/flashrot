@@ -4,14 +4,12 @@ import { useEffect, useState } from 'react';
 
 interface TTSSettings {
   enabled: boolean;
-  autoPlay: boolean;
   apiKeySet: boolean;
 }
 
 export function useTTS() {
   const [settings, setSettings] = useState<TTSSettings>({
     enabled: false,
-    autoPlay: true,
     apiKeySet: true, // No API key required for local server
   });
   const [loading, setLoading] = useState(true);
@@ -22,11 +20,12 @@ export function useTTS() {
       const settingsString = await AsyncStorage.getItem('tts_settings');
       const savedSettings = settingsString ? JSON.parse(settingsString) : {};
 
-      setSettings({
+      const newSettings = {
         enabled: savedSettings.enabled ?? false,
-        autoPlay: savedSettings.autoPlay ?? true,
         apiKeySet: true, // Always true with local server
-      });
+      };
+
+      setSettings(newSettings);
     } catch (error) {
       console.error('Error loading TTS settings:', error);
     } finally {

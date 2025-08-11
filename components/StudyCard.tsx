@@ -42,7 +42,7 @@ export default function StudyCard({
             {settings.enabled && currentAudio && (
               <AudioPlayer
                 audioUri={currentAudio}
-                autoPlay={settings.autoPlay}
+                autoPlay={true} // Always autoplay when TTS is enabled
                 size={20}
               />
             )}

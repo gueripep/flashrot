@@ -47,7 +47,6 @@ export interface ReviewRecord {
 
 class FSRSService {
     private fsrsInstance: FSRS;
-    private readonly FSRS_CARDS_KEY = 'fsrs_cards';
     private readonly STUDY_SESSIONS_KEY = 'study_sessions';
     private readonly FSRS_SETTINGS_KEY = 'fsrs_settings';
     private readonly DAILY_PROGRESS_KEY = 'daily_progress';
@@ -83,15 +82,14 @@ class FSRSService {
 
     /**
      * Convert FlashCard to EnhancedFlashCard with FSRS data
+     * This method is now mainly for backward compatibility
      */
     async enhanceCard(card: any): Promise<EnhancedFlashCard> {
-        const fsrsCards = await this.loadFSRSCards();
-        let fsrsData = fsrsCards[card.id];
+        let fsrsData = card.fsrs;
 
         if (!fsrsData) {
             // Create new FSRS data for this card
             fsrsData = this.createNewFSRSCard(card.id, card.deckId);
-            await this.saveFSRSCardData(card.id, fsrsData);
         } else {
             // Ensure dates are Date objects
             if (fsrsData.due && typeof fsrsData.due === 'string') {
@@ -111,7 +109,7 @@ class FSRSService {
     /**
      * Get new cards for today with daily limit
      */
-    async getNewCardsForToday(deckId: string, allCards: any[]): Promise<EnhancedFlashCard[]> {
+    async getNewCardsForToday(deckId: string, allCards?: any[]): Promise<EnhancedFlashCard[]> {
         const dailyProgress = await this.getDailyProgress();
         const today = new Date().toDateString();
 
@@ -130,11 +128,8 @@ class FSRSService {
 
         console.log('Daily new cards remaining:', remainingNewCards);
 
-        const enhancedCards = await Promise.all(
-            allCards
-                .filter(card => card.deckId === deckId)
-                .map(card => this.enhanceCard(card))
-        );
+        // Load cards from deck storage instead of using allCards parameter
+        const enhancedCards = await this.loadCardsFromDeck(deckId);
 
         // Get new cards (reps === 0) that are due
         const now = new Date();
@@ -149,13 +144,11 @@ class FSRSService {
     /**
      * Get cards due for review for a specific deck
      */
-    async getCardsForReview(deckId: string, allCards: any[]): Promise<EnhancedFlashCard[]> {
+    async getCardsForReview(deckId: string, allCards?: any[]): Promise<EnhancedFlashCard[]> {
         const now = new Date();
-        const enhancedCards = await Promise.all(
-            allCards
-                .filter(card => card.deckId === deckId)
-                .map(card => this.enhanceCard(card))
-        );
+        
+        // Load cards from deck storage
+        const enhancedCards = await this.loadCardsFromDeck(deckId);
 
         // Filter cards that are due for review
         const dueCards = enhancedCards.filter(card => {
@@ -171,12 +164,9 @@ class FSRSService {
     /**
      * Get all cards for a deck with FSRS data, sorted by next review date
      */
-    async getAllCardsForDeck(deckId: string, allCards: any[]): Promise<EnhancedFlashCard[]> {
-        const enhancedCards = await Promise.all(
-            allCards
-                .filter(card => card.deckId === deckId)
-                .map(card => this.enhanceCard(card))
-        );
+    async getAllCardsForDeck(deckId: string, allCards?: any[]): Promise<EnhancedFlashCard[]> {
+        // Load cards from deck storage
+        const enhancedCards = await this.loadCardsFromDeck(deckId);
 
         // Sort by due date
         enhancedCards.sort((a, b) => a.fsrs.due.getTime() - b.fsrs.due.getTime());
@@ -193,10 +183,26 @@ class FSRSService {
         reviewDate: Date = new Date(),
         timeTaken: number = 0
     ): Promise<Card> {
-        const fsrsCards = await this.loadFSRSCards();
-        const currentFSRSData = fsrsCards[cardId];
+        // Find the card and get its deck ID
+        let deckId: string | null = null;
+        let currentFSRSData: Card | null = null;
+        
+        // We need to find which deck this card belongs to
+        const allKeys = await AsyncStorage.getAllKeys();
+        const deckKeys = allKeys.filter(key => key.startsWith('flashcards_'));
+        
+        for (const key of deckKeys) {
+            const currentDeckId = key.replace('flashcards_', '');
+            const cards = await this.loadCardsFromDeck(currentDeckId);
+            const card = cards.find(c => c.id === cardId);
+            if (card) {
+                deckId = currentDeckId;
+                currentFSRSData = card.fsrs;
+                break;
+            }
+        }
 
-        if (!currentFSRSData) {
+        if (!currentFSRSData || !deckId) {
             throw new Error(`No FSRS data found for card ${cardId}`);
         }
 
@@ -248,8 +254,8 @@ class FSRSService {
             learning_steps: updatedCard.card.learning_steps || 0,
         };
 
-        // Save updated FSRS data
-        await this.saveFSRSCardData(cardId, newFSRSData);
+        // Save updated FSRS data to the deck
+        await this.updateCardInDeck(deckId, cardId, newFSRSData);
 
         // Update daily progress if this was a new card (first review)
         if (currentFSRSData.reps === 0) {
@@ -266,8 +272,22 @@ class FSRSService {
      * Get the next review intervals for all rating options
      */
     async getReviewOptions(cardId: string): Promise<{ [key: number]: { interval: number; due: Date } }> {
-        const fsrsCards = await this.loadFSRSCards();
-        const currentFSRSData = fsrsCards[cardId];
+        // Find the card and get its FSRS data
+        let currentFSRSData: Card | null = null;
+        
+        // We need to find which deck this card belongs to
+        const allKeys = await AsyncStorage.getAllKeys();
+        const deckKeys = allKeys.filter(key => key.startsWith('flashcards_'));
+        
+        for (const key of deckKeys) {
+            const currentDeckId = key.replace('flashcards_', '');
+            const cards = await this.loadCardsFromDeck(currentDeckId);
+            const card = cards.find(c => c.id === cardId);
+            if (card) {
+                currentFSRSData = card.fsrs;
+                break;
+            }
+        }
 
         if (!currentFSRSData) {
             throw new Error(`No FSRS data found for card ${cardId}`);
@@ -328,14 +348,9 @@ class FSRSService {
         dueCards: number;
         avgRetention: number;
     }> {
-        const fsrsCards = await this.loadFSRSCards();
+        const cards = await this.loadCardsFromDeck(deckId);
+        console.log('Deck Cards:', cards);
         const now = new Date();
-
-        // Filter cards for this deck
-        const deckCardIds = Object.keys(fsrsCards).filter(cardId => {
-            // You might need to store deckId in FSRS data or cross-reference
-            return true; // For now, we'll process all cards
-        });
 
         let totalCards = 0;
         let newCards = 0;
@@ -343,8 +358,8 @@ class FSRSService {
         let reviewCards = 0;
         let dueCards = 0;
 
-        for (const cardId of deckCardIds) {
-            const fsrsData = fsrsCards[cardId];
+        for (const card of cards) {
+            const fsrsData = card.fsrs;
             totalCards++;
 
             if (fsrsData.state === State.New) {
@@ -355,7 +370,6 @@ class FSRSService {
                 reviewCards++;
             }
 
-            console.log(`FSRS Data for card ${cardId}: due=${new Date(fsrsData.due).toLocaleString()}, now=${new Date(now).toLocaleString()}`);
             if (fsrsData.due <= now) {
                 dueCards++;
             }
@@ -412,38 +426,73 @@ class FSRSService {
         return null;
     }
 
-    // Private helper methods
+    /**
+     * Helper method to get cards from a specific deck (public interface)
+     */
+    async getCardsFromDeck(deckId: string): Promise<EnhancedFlashCard[]> {
+        return this.loadCardsFromDeck(deckId);
+    }
 
-    private async loadFSRSCards(): Promise<{ [cardId: string]: Card }> {
+    /**
+     * Helper method to save cards to a specific deck (public interface)
+     */
+    async saveCardsToDeck_Public(deckId: string, cards: EnhancedFlashCard[]): Promise<void> {
+        return this.saveCardsToDeck(deckId, cards);
+    }
+
+    /**
+     * Load cards from deck storage
+     */
+    private async loadCardsFromDeck(deckId: string): Promise<EnhancedFlashCard[]> {
         try {
-            const data = await AsyncStorage.getItem(this.FSRS_CARDS_KEY);
-            const fsrsCards = data ? JSON.parse(data) : {};
-
-            // Convert date strings back to Date objects
-            for (const cardId in fsrsCards) {
-                const card = fsrsCards[cardId];
-                if (card.due && typeof card.due === 'string') {
-                    card.due = new Date(card.due);
+            const STORAGE_KEY = `flashcards_${deckId}`;
+            const data = await AsyncStorage.getItem(STORAGE_KEY);
+            if (!data) return [];
+            
+            const cards: EnhancedFlashCard[] = JSON.parse(data);
+            
+            // Ensure dates are Date objects
+            cards.forEach(card => {
+                if (card.fsrs.due && typeof card.fsrs.due === 'string') {
+                    card.fsrs.due = new Date(card.fsrs.due);
                 }
-                if (card.last_review && typeof card.last_review === 'string') {
-                    card.last_review = new Date(card.last_review);
+                if (card.fsrs.last_review && typeof card.fsrs.last_review === 'string') {
+                    card.fsrs.last_review = new Date(card.fsrs.last_review);
                 }
-            }
-
-            return fsrsCards;
+            });
+            
+            return cards;
         } catch (error) {
-            console.error('Error loading FSRS cards:', error);
-            return {};
+            console.error('Error loading cards from deck:', error);
+            return [];
         }
     }
 
-    private async saveFSRSCardData(cardId: string, fsrsData: Card): Promise<void> {
+    /**
+     * Save cards to deck storage
+     */
+    private async saveCardsToDeck(deckId: string, cards: EnhancedFlashCard[]): Promise<void> {
         try {
-            const fsrsCards = await this.loadFSRSCards();
-            fsrsCards[cardId] = fsrsData;
-            await AsyncStorage.setItem(this.FSRS_CARDS_KEY, JSON.stringify(fsrsCards));
+            const STORAGE_KEY = `flashcards_${deckId}`;
+            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
         } catch (error) {
-            console.error('Error saving FSRS card data:', error);
+            console.error('Error saving cards to deck:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Update a specific card's FSRS data in deck storage
+     */
+    private async updateCardInDeck(deckId: string, cardId: string, updatedFSRS: Card): Promise<void> {
+        try {
+            const cards = await this.loadCardsFromDeck(deckId);
+            const updatedCards = cards.map(card => 
+                card.id === cardId ? { ...card, fsrs: updatedFSRS } : card
+            );
+            await this.saveCardsToDeck(deckId, updatedCards);
+        } catch (error) {
+            console.error('Error updating card in deck:', error);
             throw error;
         }
     }
@@ -615,7 +664,23 @@ class FSRSService {
      */
     async debugResetAllCards(): Promise<void> {
         try {
-            await AsyncStorage.removeItem(this.FSRS_CARDS_KEY);
+            // Get all deck keys and reset FSRS data in each deck
+            const allKeys = await AsyncStorage.getAllKeys();
+            const deckKeys = allKeys.filter(key => key.startsWith('flashcards_'));
+            
+            for (const key of deckKeys) {
+                const deckId = key.replace('flashcards_', '');
+                const cards = await this.loadCardsFromDeck(deckId);
+                
+                // Reset FSRS data for each card
+                const resetCards = cards.map(card => ({
+                    ...card,
+                    fsrs: this.createNewFSRSCard(card.id, card.deckId)
+                }));
+                
+                await this.saveCardsToDeck(deckId, resetCards);
+            }
+            
             await AsyncStorage.removeItem(this.DAILY_PROGRESS_KEY);
             await AsyncStorage.removeItem(this.STUDY_SESSIONS_KEY);
             console.log('🔧 DEBUG: All FSRS data has been reset!');
@@ -630,11 +695,31 @@ class FSRSService {
      */
     async debugResetCards(cardIds: string[]): Promise<void> {
         try {
-            const fsrsCards = await this.loadFSRSCards();
-            for (const cardId of cardIds) {
-                delete fsrsCards[cardId];
+            // We need to find which decks these cards belong to
+            const allKeys = await AsyncStorage.getAllKeys();
+            const deckKeys = allKeys.filter(key => key.startsWith('flashcards_'));
+            
+            for (const key of deckKeys) {
+                const deckId = key.replace('flashcards_', '');
+                const cards = await this.loadCardsFromDeck(deckId);
+                let hasChanges = false;
+                
+                const updatedCards = cards.map(card => {
+                    if (cardIds.includes(card.id)) {
+                        hasChanges = true;
+                        return {
+                            ...card,
+                            fsrs: this.createNewFSRSCard(card.id, card.deckId)
+                        };
+                    }
+                    return card;
+                });
+                
+                if (hasChanges) {
+                    await this.saveCardsToDeck(deckId, updatedCards);
+                }
             }
-            await AsyncStorage.setItem(this.FSRS_CARDS_KEY, JSON.stringify(fsrsCards));
+            
             console.log(`🔧 DEBUG: Reset FSRS data for ${cardIds.length} cards:`, cardIds);
         } catch (error) {
             console.error('Error resetting specific cards:', error);
@@ -647,20 +732,31 @@ class FSRSService {
      */
     async debugTimeTravel(days: number): Promise<void> {
         try {
-            const fsrsCards = await this.loadFSRSCards();
             const timeOffset = days * 24 * 60 * 60 * 1000; // Convert days to milliseconds
             
-            // Update all card due dates by moving them backward in time
-            // (making them more overdue if days is positive)
-            for (const cardId in fsrsCards) {
-                const card = fsrsCards[cardId];
-                card.due = new Date(card.due.getTime() - timeOffset);
-                if (card.last_review) {
-                    card.last_review = new Date(card.last_review.getTime() - timeOffset);
-                }
-            }
+            // Update all cards in all decks
+            const allKeys = await AsyncStorage.getAllKeys();
+            const deckKeys = allKeys.filter(key => key.startsWith('flashcards_'));
             
-            await AsyncStorage.setItem(this.FSRS_CARDS_KEY, JSON.stringify(fsrsCards));
+            for (const key of deckKeys) {
+                const deckId = key.replace('flashcards_', '');
+                const cards = await this.loadCardsFromDeck(deckId);
+                
+                // Update all card due dates by moving them backward in time
+                // (making them more overdue if days is positive)
+                const updatedCards = cards.map(card => ({
+                    ...card,
+                    fsrs: {
+                        ...card.fsrs,
+                        due: new Date(card.fsrs.due.getTime() - timeOffset),
+                        last_review: card.fsrs.last_review 
+                            ? new Date(card.fsrs.last_review.getTime() - timeOffset)
+                            : card.fsrs.last_review
+                    }
+                }));
+                
+                await this.saveCardsToDeck(deckId, updatedCards);
+            }
             
             // Also update daily progress to simulate new day
             if (days >= 1) {
@@ -684,14 +780,33 @@ class FSRSService {
      */
     async debugSetCardDueDate(cardId: string, dueDate: Date): Promise<void> {
         try {
-            const fsrsCards = await this.loadFSRSCards();
-            if (fsrsCards[cardId]) {
-                fsrsCards[cardId].due = dueDate;
-                await AsyncStorage.setItem(this.FSRS_CARDS_KEY, JSON.stringify(fsrsCards));
-                console.log(`🔧 DEBUG: Set card ${cardId} due date to:`, dueDate);
-            } else {
-                console.warn(`🔧 DEBUG: Card ${cardId} not found in FSRS data`);
+            // Find the card and update its due date
+            const allKeys = await AsyncStorage.getAllKeys();
+            const deckKeys = allKeys.filter(key => key.startsWith('flashcards_'));
+            
+            for (const key of deckKeys) {
+                const deckId = key.replace('flashcards_', '');
+                const cards = await this.loadCardsFromDeck(deckId);
+                
+                const updatedCards = cards.map(card => {
+                    if (card.id === cardId) {
+                        return {
+                            ...card,
+                            fsrs: { ...card.fsrs, due: dueDate }
+                        };
+                    }
+                    return card;
+                });
+                
+                // Only save if we found and updated the card
+                if (updatedCards.some(card => card.id === cardId)) {
+                    await this.saveCardsToDeck(deckId, updatedCards);
+                    console.log(`🔧 DEBUG: Set card ${cardId} due date to:`, dueDate);
+                    return;
+                }
             }
+            
+            console.warn(`🔧 DEBUG: Card ${cardId} not found in any deck`);
         } catch (error) {
             console.error('Error setting card due date:', error);
             throw error;
@@ -703,14 +818,24 @@ class FSRSService {
      */
     async debugMakeAllCardsDue(): Promise<void> {
         try {
-            const fsrsCards = await this.loadFSRSCards();
             const now = new Date();
             
-            for (const cardId in fsrsCards) {
-                fsrsCards[cardId].due = now;
+            // Update all cards in all decks
+            const allKeys = await AsyncStorage.getAllKeys();
+            const deckKeys = allKeys.filter(key => key.startsWith('flashcards_'));
+            
+            for (const key of deckKeys) {
+                const deckId = key.replace('flashcards_', '');
+                const cards = await this.loadCardsFromDeck(deckId);
+                
+                const updatedCards = cards.map(card => ({
+                    ...card,
+                    fsrs: { ...card.fsrs, due: now }
+                }));
+                
+                await this.saveCardsToDeck(deckId, updatedCards);
             }
             
-            await AsyncStorage.setItem(this.FSRS_CARDS_KEY, JSON.stringify(fsrsCards));
             console.log('🔧 DEBUG: Made all cards due now');
         } catch (error) {
             console.error('Error making all cards due:', error);
@@ -739,22 +864,34 @@ class FSRSService {
      * Get all FSRS data for debugging
      */
     async debugGetAllData(): Promise<{
-        fsrsCards: { [cardId: string]: Card };
+        deckCards: { [deckId: string]: EnhancedFlashCard[] };
         dailyProgress: { date: string, newCardsStudied: number };
         sessions: { [sessionId: string]: StudySession };
     }> {
         try {
-            const fsrsCards = await this.loadFSRSCards();
             const dailyProgress = await this.getDailyProgress();
             const sessions = await this.loadStudySessions();
             
+            // Load all deck cards
+            const allKeys = await AsyncStorage.getAllKeys();
+            const deckKeys = allKeys.filter(key => key.startsWith('flashcards_'));
+            const deckCards: { [deckId: string]: EnhancedFlashCard[] } = {};
+            
+            for (const key of deckKeys) {
+                const deckId = key.replace('flashcards_', '');
+                deckCards[deckId] = await this.loadCardsFromDeck(deckId);
+            }
+            
+            const totalCards = Object.values(deckCards).reduce((sum, cards) => sum + cards.length, 0);
+            
             console.log('🔧 DEBUG: All FSRS Data:', {
-                totalCards: Object.keys(fsrsCards).length,
+                totalDecks: Object.keys(deckCards).length,
+                totalCards,
                 dailyProgress,
                 totalSessions: Object.keys(sessions).length
             });
             
-            return { fsrsCards, dailyProgress, sessions };
+            return { deckCards, dailyProgress, sessions };
         } catch (error) {
             console.error('Error getting debug data:', error);
             throw error;
@@ -764,10 +901,11 @@ class FSRSService {
     /**
      * Create test cards with specific states (for testing)
      */
-    async debugCreateTestCards(count: number, state: State = State.New): Promise<string[]> {
+    async debugCreateTestCards(count: number, deckId: string, state: State = State.New): Promise<string[]> {
         try {
             const testCardIds: string[] = [];
             const now = new Date();
+            const existingCards = await this.loadCardsFromDeck(deckId);
             
             for (let i = 0; i < count; i++) {
                 const cardId = `debug_test_card_${Date.now()}_${i}`;
@@ -784,11 +922,22 @@ class FSRSService {
                     learning_steps: 0,
                 };
                 
-                await this.saveFSRSCardData(cardId, fsrsData);
+                const testCard: EnhancedFlashCard = {
+                    id: cardId,
+                    front: `Test Question ${i + 1}`,
+                    back: `Test Answer ${i + 1}`,
+                    createdAt: new Date().toISOString(),
+                    deckId: deckId,
+                    fsrs: fsrsData
+                };
+                
+                existingCards.push(testCard);
                 testCardIds.push(cardId);
             }
             
-            console.log(`🔧 DEBUG: Created ${count} test cards with state ${state}:`, testCardIds);
+            await this.saveCardsToDeck(deckId, existingCards);
+            
+            console.log(`🔧 DEBUG: Created ${count} test cards with state ${state} in deck ${deckId}:`, testCardIds);
             return testCardIds;
         } catch (error) {
             console.error('Error creating test cards:', error);
@@ -822,8 +971,11 @@ class FSRSService {
         try {
             const data = JSON.parse(jsonData);
             
-            if (data.fsrsCards) {
-                await AsyncStorage.setItem(this.FSRS_CARDS_KEY, JSON.stringify(data.fsrsCards));
+            if (data.deckCards) {
+                // Save each deck's cards
+                for (const [deckId, cards] of Object.entries(data.deckCards)) {
+                    await this.saveCardsToDeck(deckId, cards as EnhancedFlashCard[]);
+                }
             }
             if (data.dailyProgress) {
                 await this.saveDailyProgress(data.dailyProgress);
@@ -837,6 +989,36 @@ class FSRSService {
             console.error('Error importing data:', error);
             throw error;
         }
+    }
+
+    // A helper function to log all AsyncStorage data
+    debugAsyncStorage = async () => {
+        try {
+            const keys = await AsyncStorage.getAllKeys();
+            const items = await AsyncStorage.multiGet(keys);
+
+            console.log("--- AsyncStorage Content ---");
+            if (items.length === 0) {
+            console.log("No data found.");
+            } else {
+            items.forEach(([key, value]) => {
+                console.log(`${key}: ${value}`);
+            });
+            }
+            console.log("--------------------------");
+
+        } catch (error) {
+            console.error("Error debugging AsyncStorage:", error);
+        }
+    };
+
+    /**
+     * Delete FSRS data for a specific card (now handled in useCards hook)
+     * This method is kept for backward compatibility but is no longer needed
+     */
+    async deleteFSRSCardData(cardId: string): Promise<void> {
+        console.log(`🔧 DEBUG: deleteFSRSCardData called for card ${cardId} - this is now handled automatically in the unified storage`);
+        // No longer needed since cards are deleted from unified storage in useCards hook
     }
 }
 

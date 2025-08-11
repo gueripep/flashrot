@@ -95,13 +95,15 @@ export default function SubtitleDisplay({
     }, [timingData, showFullText]);
 
     useEffect(() => {
-        if (!timingData || !isPlaying) {
+        if (!timingData) {
             setHighlightedWords(new Set());
             previousHighlightedWords.current = new Set();
             return;
         }
 
         // Find which words should be highlighted based on current time
+        // Note: We highlight words based on currentTime regardless of playing state
+        // so users can see which word corresponds to the current audio position
         const highlighted = new Set<number>();
         timingData.word_timings?.forEach((wordTiming, index) => {
             // Calculate end time from start_time + duration, or use end_time if available
@@ -109,19 +111,16 @@ export default function SubtitleDisplay({
                 (wordTiming.duration ? wordTiming.start_time + wordTiming.duration : wordTiming.start_time + 0.5);
 
             const isHighlighted = currentTime >= wordTiming.start_time && currentTime <= endTime;
+            
             if (isHighlighted) {
                 highlighted.add(index);
-                // Only log if this word wasn't previously highlighted
-                if (!previousHighlightedWords.current.has(index)) {
-                    console.log(`🔥 Highlighting word ${index}: "${wordTiming.word}" (${wordTiming.start_time.toFixed(2)}s - ${endTime.toFixed(2)}s) at time ${currentTime.toFixed(2)}s`);
-                }
             }
         });
-
+        
         // Update the previous state reference
         previousHighlightedWords.current = new Set(highlighted);
         setHighlightedWords(highlighted);
-    }, [currentTime, timingData, isPlaying]);
+    }, [currentTime, timingData]);
 
     const getCurrentSubtitleChunk = () => {
         if (!timingData || !timingData.word_timings || timingData.word_timings.length === 0) {

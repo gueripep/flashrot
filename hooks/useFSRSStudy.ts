@@ -1,9 +1,9 @@
 import {
-    EnhancedFlashCard,
-    fsrsService,
-    Rating
+  EnhancedFlashCard,
+  fsrsService,
+  Rating
 } from '@/services/fsrsService';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { FlashCard } from './useCards';
 
@@ -32,32 +32,14 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
   const [loading, setLoading] = useState(true);
   const [isStartingSession, setIsStartingSession] = useState(false);
   const lastStartAttempt = useRef<number>(0);
+  const lastRefreshAttempt = useRef<number>(0);
 
-  // Load enhanced cards with FSRS data
-  useEffect(() => {
-    loadEnhancedCards();
-  }, [deckId, allCards]);
-
-  // Load study statistics
-  useEffect(() => {
-    if (deckId) {
-      loadStudyStats();
-    }
-  }, [deckId, enhancedCards]);
-
-  const loadEnhancedCards = async () => {
+  const loadEnhancedCards = useCallback(async () => {
     try {
       setLoading(true);
-      console.log('Loading enhanced cards for', allCards.length, 'cards');
       const enhanced = await Promise.all(
         allCards.map(card => fsrsService.enhanceCard(card))
       );
-      console.log('Enhanced cards loaded:', enhanced.length);
-      console.log('Enhanced cards FSRS status:', enhanced.map(card => ({ 
-        id: card.id, 
-        reps: card.fsrs.reps,
-        state: card.fsrs.state
-      })));
       setEnhancedCards(enhanced);
     } catch (error) {
       console.error('Error loading enhanced cards:', error);
@@ -65,16 +47,30 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [allCards]);
 
-  const loadStudyStats = async () => {
+  const loadStudyStats = useCallback(async () => {
     try {
       const stats = await fsrsService.getDeckStats(deckId);
       setStudyStats(stats);
     } catch (error) {
       console.error('Error loading study stats:', error);
     }
-  };
+  }, [deckId]);
+
+  // Load enhanced cards with FSRS data
+  useEffect(() => {
+    if (deckId && allCards.length > 0) {
+      loadEnhancedCards();
+    }
+  }, [deckId, loadEnhancedCards]);
+
+  // Load study statistics
+  useEffect(() => {
+    if (deckId && enhancedCards.length > 0) {
+      loadStudyStats();
+    }
+  }, [deckId, enhancedCards.length, loadStudyStats]); // Use length instead of the full array to prevent unnecessary re-renders
 
   /**
    * Start a study session with specified options
@@ -355,8 +351,18 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
     
     // Refresh
     refreshData: () => {
-      loadEnhancedCards();
-      loadStudyStats();
+      const now = Date.now();
+      
+      // Debounce: prevent calls within 1 second of each other
+      if (now - lastRefreshAttempt.current < 1000) {
+        return;
+      }
+      lastRefreshAttempt.current = now;
+      
+      console.log('Refreshing FSRS data...');
+      if (deckId && allCards.length > 0) {
+        loadEnhancedCards();
+      }
     }
   };
 }

@@ -42,7 +42,6 @@ export default function HomeScreen() {
   }, [navigation, textColor]);
 
   const handlePlusPress = () => {
-    console.log('Plus button pressed!'); // Debug log
     setModalVisible(true);
   };
 

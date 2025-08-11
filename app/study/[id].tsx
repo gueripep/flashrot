@@ -94,6 +94,7 @@ export default function StudyScreen() {
   const errorColor = useThemeColor({}, 'error');
   const successColor = useThemeColor({}, 'success');
   const { settings } = useTTS();
+
   
   const { decks, loading: decksLoading } = useDecks();
   const { cards, loading: cardsLoading } = useCards(id || '');
@@ -165,7 +166,7 @@ export default function StudyScreen() {
   useEffect(() => {
     if (mode && id && cards.length > 0 && !isStudyActive) {
       setUseFSRS(true);
-      const studyMode = (mode as 'review' | 'all' | 'new') || 'review';
+      const studyMode =  (mode as 'review' | 'all' | 'new') || 'review';
       startStudySession({ mode: studyMode });
     } else if (!mode) {
       setUseFSRS(false);
@@ -209,7 +210,7 @@ export default function StudyScreen() {
   const handleFlip = () => {
     setIsFlipped(!isFlipped);
     setAudioPosition(0);
-    setIsAudioPlaying(false);
+    // Don't force stop audio playing state - let AudioPlayer handle autoplay
     
     if (!isFlipped && useFSRS) {
       // Card was flipped to answer side in FSRS mode
@@ -251,7 +252,7 @@ export default function StudyScreen() {
           setShowRatingButtons(false);
           setReviewOptions(null);
           setAudioPosition(0);
-          setIsAudioPlaying(false);
+          // Don't force audio playing state - let AudioPlayer handle it
           setReviewStartTime(null);
         } else {
           setStudyComplete(true);
@@ -275,7 +276,7 @@ export default function StudyScreen() {
       setCurrentCardIndex(prev => prev + 1);
       setIsFlipped(false);
       setAudioPosition(0);
-      setIsAudioPlaying(false);
+      // Don't force audio playing state - let AudioPlayer handle it
     } else {
       setStudyComplete(true);
     }
@@ -297,7 +298,7 @@ export default function StudyScreen() {
     setStudyComplete(false);
     setCorrectCount(0);
     setAudioPosition(0);
-    setIsAudioPlaying(false);
+    // Don't force audio playing state - let AudioPlayer handle it
   };
 
   const handleFinish = () => {
@@ -393,7 +394,7 @@ export default function StudyScreen() {
         <View style={styles.audioContainer}>
           <AudioPlayer
             audioUri={isFlipped ? currentCard?.answerAudio : currentCard?.questionAudio}
-            autoPlay={settings.autoPlay}
+            autoPlay={true} // Always autoplay when TTS is enabled
             size={24}
             onPositionChange={setAudioPosition}
             onPlayStateChange={setIsAudioPlaying}

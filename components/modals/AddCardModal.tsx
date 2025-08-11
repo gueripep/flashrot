@@ -69,16 +69,8 @@ export default function AddCardModal({
     }
 
     setSaving(true);
-    const success = await onSaveCard(front, back, settings.enabled && generateAudio);
+    await onSaveCard(front, back, settings.enabled && generateAudio);
     setSaving(false);
-
-    if (success) {
-      Alert.alert(
-        'Success',
-        mode === 'add' ? 'Card added successfully!' : 'Card updated successfully!'
-      );
-      handleClose();
-    }
   };
 
   return (

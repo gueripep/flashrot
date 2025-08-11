@@ -1,10 +1,12 @@
 import { aiService } from '@/services/aiService';
+import { fsrsService, EnhancedFlashCard } from '@/services/fsrsService';
 import { ttsService } from '@/services/ttsService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
+// Keep FlashCard interface for backward compatibility, but use EnhancedFlashCard internally
 export interface FlashCard {
   id: string;
   front: string;
@@ -16,13 +18,12 @@ export interface FlashCard {
 }
 
 export function useCards(deckId: string) {
-  const [cards, setCards] = useState<FlashCard[]>([]);
+  const [cards, setCards] = useState<EnhancedFlashCard[]>([]);
   const [loading, setLoading] = useState(true);
 
   const STORAGE_KEY = `flashcards_${deckId}`;
 
-  // Helper function to validate audio file paths
-  const validateAudioFiles = async (cards: FlashCard[]): Promise<FlashCard[]> => {
+  const validateAudioFiles = async (cards: EnhancedFlashCard[]): Promise<EnhancedFlashCard[]> => {
     const validatedCards = await Promise.all(
       cards.map(async (card) => {
         const validatedCard = { ...card };
@@ -67,19 +68,41 @@ export function useCards(deckId: string) {
       setLoading(true);
       const storedCards = await AsyncStorage.getItem(STORAGE_KEY);
       if (storedCards) {
-        const parsedCards = JSON.parse(storedCards);
-        // Validate that audio files still exist and clean up broken references
-        const validatedCards = await validateAudioFiles(parsedCards);
+        const parsedCards: EnhancedFlashCard[] = JSON.parse(storedCards);
         
-        // Save back to storage if any audio references were cleaned up
+        // Ensure FSRS dates are properly converted to Date objects and add FSRS data if missing
+        const processedCards = await Promise.all(
+          parsedCards.map(async (card) => {
+            // If card doesn't have FSRS data, create it
+            if (!card.fsrs) {
+              const fsrsData = fsrsService.createNewFSRSCard(card.id, card.deckId);
+              card.fsrs = fsrsData;
+            } else {
+              // Ensure dates are Date objects
+              if (card.fsrs.due && typeof card.fsrs.due === 'string') {
+                card.fsrs.due = new Date(card.fsrs.due);
+              }
+              if (card.fsrs.last_review && typeof card.fsrs.last_review === 'string') {
+                card.fsrs.last_review = new Date(card.fsrs.last_review);
+              }
+            }
+            return card;
+          })
+        );
+        
+        // Validate that audio files still exist and clean up broken references
+        const validatedCards = await validateAudioFiles(processedCards);
+        
+        // Save back to storage if any audio references were cleaned up or FSRS data was added
         const hasChanges = validatedCards.some((card, index) => 
           card.questionAudio !== parsedCards[index]?.questionAudio ||
-          card.answerAudio !== parsedCards[index]?.answerAudio
+          card.answerAudio !== parsedCards[index]?.answerAudio ||
+          !parsedCards[index]?.fsrs
         );
         
         if (hasChanges) {
           await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(validatedCards));
-          console.log('Cleaned up broken audio references for deck:', deckId);
+          console.log('Updated cards with FSRS data and cleaned up broken audio references for deck:', deckId);
         }
         
         setCards(validatedCards);
@@ -97,12 +120,22 @@ export function useCards(deckId: string) {
 
   const saveCard = async (front: string, back: string, generateAudio: boolean = true) => {
     try {
-      const newCard: FlashCard = {
+      // Create the basic card first
+      const baseCard: FlashCard = {
         id: Date.now().toString(),
         front: front.trim(),
         back: back.trim(),
         createdAt: new Date().toISOString(),
         deckId
+      };
+      
+      // Create FSRS data for the new card
+      const fsrsData = fsrsService.createNewFSRSCard(baseCard.id, deckId);
+      
+      // Create the enhanced card with FSRS data
+      const newCard: EnhancedFlashCard = {
+        ...baseCard,
+        fsrs: fsrsData
       };
       
       const updatedCards = [...cards, newCard];
@@ -167,6 +200,7 @@ export function useCards(deckId: string) {
 
   const deleteCard = async (cardId: string) => {
     try {
+      console.log('Deleting card:', cardId);
       // Find the card to get audio file paths
       const cardToDelete = cards.find(card => card.id === cardId);
       
@@ -205,7 +239,7 @@ export function useCards(deckId: string) {
     }
   };
 
-  const getCardById = (cardId: string): FlashCard | undefined => {
+  const getCardById = (cardId: string): EnhancedFlashCard | undefined => {
     return cards.find(card => card.id === cardId);
   };
 

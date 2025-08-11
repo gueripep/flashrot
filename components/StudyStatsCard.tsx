@@ -9,144 +9,19 @@ interface StudyStatsCardProps {
   loading?: boolean;
 }
 
-export default function StudyStatsCard({ stats, loading = false }: StudyStatsCardProps) {
-  const textColor = useThemeColor({}, 'text');
-  const cardBackgroundColor = useThemeColor({}, 'cardBackground');
-  const tintColor = useThemeColor({}, 'tint');
-  const successColor = useThemeColor({}, 'success');
-  const warningColor = '#fd7e14';
-  const errorColor = useThemeColor({}, 'error');
+interface StatItemProps {
+  value: string | number;
+  label: string;
+  color: string;
+  isLoading?: boolean;
+}
 
-  if (loading) {
-    return (
-      <Card style={[styles.card, { backgroundColor: cardBackgroundColor }]}>
-        <Card.Content>
-          <Text variant="titleMedium" style={[styles.title, { color: textColor }]}>
-            Study Statistics
-          </Text>
-          <Text variant="bodyMedium" style={[styles.loadingText, { color: textColor }]}>
-            Loading statistics...
-          </Text>
-        </Card.Content>
-      </Card>
-    );
-  }
-
-  if (!stats) {
-    return null;
-  }
-
-  const getStatusColor = (dueCards: number, totalCards: number) => {
-    if (dueCards === 0) return successColor;
-    if (dueCards / totalCards > 0.5) return errorColor;
-    return warningColor;
-  };
-
-  const retentionColor = stats.avgRetention >= 0.8 ? successColor : 
-                        stats.avgRetention >= 0.6 ? warningColor : errorColor;
-
-  return (
-    <Card style={[styles.card, { backgroundColor: cardBackgroundColor }]}>
-      <Card.Content>
-        <Text variant="titleMedium" style={[styles.title, { color: textColor }]}>
-          Study Statistics
-        </Text>
-        
-        <View style={styles.statsGrid}>
-          {/* Total Cards */}
-          <View style={styles.statItem}>
-            <Text variant="headlineSmall" style={[styles.statNumber, { color: tintColor }]}>
-              {stats.totalCards}
-            </Text>
-            <Text variant="bodySmall" style={[styles.statLabel, { color: textColor }]}>
-              Total Cards
-            </Text>
-          </View>
-
-          {/* Due Cards */}
-          <View style={styles.statItem}>
-            <Text variant="headlineSmall" style={[
-              styles.statNumber, 
-              { color: getStatusColor(stats.dueCards, stats.totalCards) }
-            ]}>
-              {stats.dueCards}
-            </Text>
-            <Text variant="bodySmall" style={[styles.statLabel, { color: textColor }]}>
-              Due Now
-            </Text>
-          </View>
-
-          {/* New Cards */}
-          <View style={styles.statItem}>
-            <Text variant="headlineSmall" style={[styles.statNumber, { color: tintColor }]}>
-              {stats.newCards}
-            </Text>
-            <Text variant="bodySmall" style={[styles.statLabel, { color: textColor }]}>
-              New Cards
-            </Text>
-          </View>
-
-          {/* Avg Retention */}
-          <View style={styles.statItem}>
-            <Text variant="headlineSmall" style={[styles.statNumber, { color: retentionColor }]}>
-              {Math.round(stats.avgRetention * 100)}%
-            </Text>
-            <Text variant="bodySmall" style={[styles.statLabel, { color: textColor }]}>
-              Retention
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.progressGrid}>
-          {/* Learning Cards */}
-          <View style={styles.progressItem}>
-            <View style={styles.progressHeader}>
-              <Text variant="bodyMedium" style={[styles.progressLabel, { color: textColor }]}>
-                Learning
-              </Text>
-              <Text variant="bodyMedium" style={[styles.progressNumber, { color: warningColor }]}>
-                {stats.learningCards}
-              </Text>
-            </View>
-            <View style={[styles.progressBar, { backgroundColor: textColor + '20' }]}>
-              <View 
-                style={[
-                  styles.progressFill, 
-                  { 
-                    backgroundColor: warningColor,
-                    width: `${stats.totalCards > 0 ? (stats.learningCards / stats.totalCards) * 100 : 0}%`
-                  }
-                ]} 
-              />
-            </View>
-          </View>
-
-          {/* Review Cards */}
-          <View style={styles.progressItem}>
-            <View style={styles.progressHeader}>
-              <Text variant="bodyMedium" style={[styles.progressLabel, { color: textColor }]}>
-                Reviewing
-              </Text>
-              <Text variant="bodyMedium" style={[styles.progressNumber, { color: tintColor }]}>
-                {stats.reviewCards}
-              </Text>
-            </View>
-            <View style={[styles.progressBar, { backgroundColor: textColor + '20' }]}>
-              <View 
-                style={[
-                  styles.progressFill, 
-                  { 
-                    backgroundColor: tintColor,
-                    width: `${stats.totalCards > 0 ? (stats.reviewCards / stats.totalCards) * 100 : 0}%`
-                  }
-                ]} 
-              />
-            </View>
-          </View>
-        </View>
-      </Card.Content>
-    </Card>
-  );
+interface ProgressItemProps {
+  label: string;
+  value: string | number;
+  progress: number;
+  color: string;
+  isLoading?: boolean;
 }
 
 const styles = StyleSheet.create({
@@ -156,10 +31,6 @@ const styles = StyleSheet.create({
   title: {
     marginBottom: 16,
     fontWeight: '600',
-  },
-  loadingText: {
-    textAlign: 'center',
-    opacity: 0.7,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -207,3 +78,150 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
 });
+
+function StatItem({ value, label, color, isLoading = false }: StatItemProps) {
+  const textColor = useThemeColor({}, 'text');
+  
+  return (
+    <View style={styles.statItem}>
+      <Text variant="headlineSmall" style={[
+        styles.statNumber, 
+        { 
+          color: isLoading ? textColor : color, 
+          opacity: isLoading ? 0.3 : 1 
+        }
+      ]}>
+        {isLoading ? '--' : value}
+      </Text>
+      <Text variant="bodySmall" style={[styles.statLabel, { color: textColor }]}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function ProgressItem({ label, value, progress, color, isLoading = false }: ProgressItemProps) {
+  const textColor = useThemeColor({}, 'text');
+  
+  return (
+    <View style={styles.progressItem}>
+      <View style={styles.progressHeader}>
+        <Text variant="bodyMedium" style={[styles.progressLabel, { color: textColor }]}>
+          {label}
+        </Text>
+        <Text variant="bodyMedium" style={[
+          styles.progressNumber, 
+          { 
+            color: isLoading ? textColor : color, 
+            opacity: isLoading ? 0.3 : 1 
+          }
+        ]}>
+          {isLoading ? '--' : value}
+        </Text>
+      </View>
+      <View style={[styles.progressBar, { backgroundColor: textColor + '20' }]}>
+        <View style={[
+          styles.progressFill, 
+          { 
+            backgroundColor: isLoading ? textColor + '30' : color,
+            width: `${isLoading ? 0 : progress}%`
+          }
+        ]} />
+      </View>
+    </View>
+  );
+}
+
+export default function StudyStatsCard({ stats, loading = false }: StudyStatsCardProps) {
+  const textColor = useThemeColor({}, 'text');
+  const cardBackgroundColor = useThemeColor({}, 'cardBackground');
+  const tintColor = useThemeColor({}, 'tint');
+  const successColor = useThemeColor({}, 'success');
+  const warningColor = '#fd7e14';
+  const errorColor = useThemeColor({}, 'error');
+
+  // Helper functions
+  const getStatusColor = (dueCards: number, totalCards: number) => {
+    if (dueCards === 0) return successColor;
+    if (dueCards / totalCards > 0.5) return errorColor;
+    return warningColor;
+  };
+
+  const getRetentionColor = (retention: number) => {
+    return retention >= 0.8 ? successColor : 
+           retention >= 0.6 ? warningColor : errorColor;
+  };
+
+
+  const isInitialLoad = !stats;
+  const isRefreshing = loading && !!stats;
+  const safeStats = stats || {
+    totalCards: 0,
+    dueCards: 0,
+    newCards: 0,
+    avgRetention: 0,
+    learningCards: 0,
+    reviewCards: 0
+  };
+
+  const dueCardsColor = isInitialLoad ? tintColor : getStatusColor(safeStats.dueCards, safeStats.totalCards);
+  const retentionColor = isInitialLoad ? tintColor : getRetentionColor(safeStats.avgRetention);
+  const retentionValue = isInitialLoad ? '--%' : `${Math.round(safeStats.avgRetention * 100)}%`;
+  
+  const learningProgress = safeStats.totalCards > 0 ? (safeStats.learningCards / safeStats.totalCards) * 100 : 0;
+  const reviewProgress = safeStats.totalCards > 0 ? (safeStats.reviewCards / safeStats.totalCards) * 100 : 0;
+
+  return (
+    <Card style={[styles.card, { backgroundColor: cardBackgroundColor }]}>
+      <Card.Content style={{ opacity: isRefreshing ? 0.7 : 1 }}>
+        <Text variant="titleMedium" style={[styles.title, { color: textColor }]}>
+          Study Statistics
+        </Text>
+        
+        <View style={styles.statsGrid}>
+          <StatItem
+            value={safeStats.totalCards}
+            label="Total Cards"
+            color={tintColor}
+            isLoading={isInitialLoad}
+          />
+          <StatItem
+            value={safeStats.dueCards}
+            label="Due Now"
+            color={dueCardsColor}
+            isLoading={isInitialLoad}
+          />
+          <StatItem
+            value={safeStats.newCards}
+            label="New Cards"
+            color={tintColor}
+            isLoading={isInitialLoad}
+          />
+          <StatItem
+            value={retentionValue}
+            label="Retention"
+            color={retentionColor}
+            isLoading={isInitialLoad}
+          />
+        </View>
+
+        <View style={styles.progressGrid}>
+          <ProgressItem
+            label="Learning"
+            value={safeStats.learningCards}
+            progress={learningProgress}
+            color={warningColor}
+            isLoading={isInitialLoad}
+          />
+          <ProgressItem
+            label="Reviewing"
+            value={safeStats.reviewCards}
+            progress={reviewProgress}
+            color={tintColor}
+            isLoading={isInitialLoad}
+          />
+        </View>
+      </Card.Content>
+    </Card>
+  );
+}

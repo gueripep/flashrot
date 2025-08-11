@@ -154,7 +154,7 @@ export default function TTSSettingsModal({ visible, onDismiss }: TTSSettingsModa
               
               <List.Item
                 title="Enable TTS"
-                description="Generate and play audio for flashcards"
+                description="Generate and play audio for flashcards (audio will autoplay when enabled)"
                 titleStyle={{ color: textColor }}
                 descriptionStyle={{ color: textColor, opacity: 0.7 }}
                 left={props => <List.Icon {...props} icon="volume-high" color={textColor} />}
@@ -163,22 +163,6 @@ export default function TTSSettingsModal({ visible, onDismiss }: TTSSettingsModa
                     value={settings.enabled}
                     onValueChange={(value) => updateSettings({ enabled: value })}
                     disabled={!settings.apiKeySet}
-                  />
-                )}
-                style={{ paddingVertical: 8 }}
-              />
-
-              <List.Item
-                title="Auto-play Audio"
-                description="Automatically play audio when cards are displayed"
-                titleStyle={{ color: textColor }}
-                descriptionStyle={{ color: textColor, opacity: 0.7 }}
-                left={props => <List.Icon {...props} icon="play-circle" color={textColor} />}
-                right={() => (
-                  <Switch
-                    value={settings.autoPlay}
-                    onValueChange={(value) => updateSettings({ autoPlay: value })}
-                    disabled={!settings.enabled}
                   />
                 )}
                 style={{ paddingVertical: 8 }}

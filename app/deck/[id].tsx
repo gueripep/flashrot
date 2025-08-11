@@ -1,11 +1,10 @@
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Button, Card, Chip, FAB, Text } from 'react-native-paper';
 
-import DebugPanel from '@/components/DebugPanel';
 import EmptyCardState from '@/components/EmptyCardState';
 import FlashCardItem from '@/components/FlashCardItem';
 import StudyStatsCard from '@/components/StudyStatsCard';
@@ -34,15 +33,16 @@ export default function DeckScreen() {
   const tintColor = useThemeColor({}, 'tint');
   const successColor = useThemeColor({}, 'success');
   const warningColor = '#fd7e14';
-  
+
   const { decks, loading: decksLoading, updateDeck } = useDecks();
   const { cards, loading: cardsLoading, saveCard, deleteCard, updateCard, refreshCards } = useCards(id || '');
-  const { 
-    studyStats, 
+  const {
+    studyStats,
     hasCardsForReview,
-    loading: fsrsLoading 
+    loading: fsrsLoading,
+    refreshData: refreshFSRSData
   } = useFSRSStudy(id || '', cards);
-  
+
   const [currentDeck, setCurrentDeck] = useState<Deck | null>(null);
   const [flippedCards, setFlippedCards] = useState<Set<string>>(new Set());
   const [showAddCardModal, setShowAddCardModal] = useState(false);
@@ -90,9 +90,24 @@ export default function DeckScreen() {
         setCardsForReview(hasDueCards);
       }
     };
-    
+
     checkForReviewCards();
   }, [id, cards, hasCardsForReview]);
+
+  // Refresh stats when returning from study sessions (debounced)
+  useFocusEffect(
+    useCallback(() => {
+      // Only refresh if we have cards and the loading is done
+      if (cards.length > 0 && !fsrsLoading) {
+        // Small delay to avoid rapid calls
+        const timer = setTimeout(() => {
+          refreshFSRSData();
+        }, 300);
+
+        return () => clearTimeout(timer);
+      }
+    }, [cards.length, fsrsLoading, refreshFSRSData])
+  );
 
   const handleCardFlip = (cardId: string) => {
     setFlippedCards(prev => {
@@ -122,11 +137,23 @@ export default function DeckScreen() {
   };
 
   const handleSaveCard = async (front: string, back: string, generateAudio: boolean = true) => {
+    let result;
     if (editingCard) {
-      return await updateCard(editingCard.id, front, back);
+      result = await updateCard(editingCard.id, front, back);
     } else {
-      return await saveCard(front, back, generateAudio);
+      result = await saveCard(front, back, generateAudio);
     }
+
+    // Refresh FSRS data after card operation (but only for new cards)
+    // For existing cards, the data should update automatically via the useEffect
+    if (result && !editingCard) {
+      // Small delay to ensure the card is saved before refreshing
+      setTimeout(() => {
+        refreshFSRSData();
+      }, 500);
+    }
+
+    return result;
   };
 
   const handleConfirmDelete = async () => {
@@ -138,6 +165,10 @@ export default function DeckScreen() {
           newSet.delete(selectedCard.id);
           return newSet;
         });
+        // Refresh FSRS data after successful deletion with a delay
+        setTimeout(() => {
+          refreshFSRSData();
+        }, 500);
       }
       setSelectedCard(null);
       return success;
@@ -149,7 +180,7 @@ export default function DeckScreen() {
     if (currentDeck && cards && cards.length > 0) {
       router.push({
         pathname: '/study/[id]',
-        params: { 
+        params: {
           id: id,
           mode: mode
         }
@@ -185,7 +216,7 @@ export default function DeckScreen() {
   return (
     <>
       <ScrollView style={{ backgroundColor, padding: 16 }}>
-        <DebugPanel deckId={id || ''} allCards={cards} />
+        {/* <DebugPanel deckId={id || ''} allCards={cards} /> */}
 
         {/* Header */}
         <Card style={[styles.headerCard, { backgroundColor: cardBackgroundColor }]}>
@@ -199,11 +230,11 @@ export default function DeckScreen() {
                   {currentDeck.cardCount} {currentDeck.cardCount === 1 ? 'card' : 'cards'}
                 </Text>
               </View>
-              
+
               {/* Study Status */}
               {cardsForReview && (
-                <Chip 
-                  icon="clock-alert-outline" 
+                <Chip
+                  icon="clock-alert-outline"
                   style={{ backgroundColor: warningColor + '20' }}
                   textStyle={{ color: warningColor, fontWeight: '600' }}
                 >
@@ -212,63 +243,54 @@ export default function DeckScreen() {
               )}
             </View>
           </Card.Content>
-          
+
           <Card.Actions style={styles.studyActions}>
-            <Button 
-              mode="outlined" 
-              onPress={() => handleStartStudy('all')}
-              style={[styles.studyButton, { borderColor: tintColor }]}
-              textColor={tintColor}
-            >
-              Study All
-            </Button>
-            
-            {cardsForReview && (
-              <Button 
-                mode="contained" 
+            <View style={styles.studyButtonContainer}>
+              <Button
+                mode="contained"
                 onPress={() => handleStartStudy('review')}
-                style={[styles.studyButton, { backgroundColor: warningColor }]}
+                style={[styles.studyButton, { backgroundColor: cardsForReview ? warningColor : '#999' }]}
                 textColor="white"
+                disabled={!cardsForReview}
               >
                 Review Due
               </Button>
-            )}
-            
-            {!cardsForReview && (
-              <Button 
-                mode="contained" 
-                onPress={() => handleStartStudy('new')}
-                style={[styles.studyButton, { backgroundColor: tintColor }]}
-                textColor="white"
-              >
-                Start Studying
-              </Button>
-            )}
+              {!cardsForReview && (
+                <Text variant="bodySmall" style={{ color: textColor, opacity: 0.6, marginTop: 4, textAlign: 'center' }}>
+                  No cards due for review
+                </Text>
+              )}
+            </View>
           </Card.Actions>
         </Card>
 
         {/* Study Statistics */}
-        <StudyStatsCard stats={studyStats} loading={fsrsLoading} />
+        <StudyStatsCard 
+          stats={studyStats} 
+          loading={fsrsLoading && !!studyStats} 
+        />
 
         {/* Cards List */}
         <Text variant="titleMedium" style={{ color: textColor, marginTop: 24, marginBottom: 16 }}>
           Flashcards
         </Text>
+        <View style={{ marginBottom: 32 }}>
+          {currentDeck.cards && currentDeck.cards.length > 0 ? (
+            currentDeck.cards.map((card) => (
+              <FlashCardItem
+                key={card.id}
+                card={card}
+                isFlipped={flippedCards.has(card.id)}
+                onFlip={handleCardFlip}
+                onEdit={handleEditCard}
+                onDelete={handleDeleteCard}
+              />
+            ))
+          ) : (
+            <EmptyCardState />
+          )}
+        </View>
 
-        {currentDeck.cards && currentDeck.cards.length > 0 ? (
-          currentDeck.cards.map((card) => (
-            <FlashCardItem
-              key={card.id}
-              card={card}
-              isFlipped={flippedCards.has(card.id)}
-              onFlip={handleCardFlip}
-              onEdit={handleEditCard}
-              onDelete={handleDeleteCard}
-            />
-          ))
-        ) : (
-          <EmptyCardState />
-        )}
       </ScrollView>
 
       {/* Floating Action Button */}
@@ -316,6 +338,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: 8,
     paddingTop: 8,
+  },
+  studyButtonContainer: {
+    alignItems: 'center',
   },
   studyButton: {
     minWidth: 120,

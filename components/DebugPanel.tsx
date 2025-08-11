@@ -102,7 +102,6 @@ export default function DebugPanel({ deckId, allCards, onRefresh }: DebugPanelPr
   const handleExportData = async () => {
     try {
       const jsonData = await debug.exportData();
-      console.log('FSRS Export Data:', jsonData);
       Alert.alert('Success', 'Data exported to console. Check logs!');
     } catch (error) {
       Alert.alert('Error', 'Failed to export data');
@@ -112,7 +111,6 @@ export default function DebugPanel({ deckId, allCards, onRefresh }: DebugPanelPr
   const handleGetAllData = async () => {
     try {
       const data = await debug.getAllData();
-      console.log('All FSRS Data:', data);
       Alert.alert('Success', 'All data logged to console!');
     } catch (error) {
       Alert.alert('Error', 'Failed to get data');

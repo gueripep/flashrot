@@ -36,7 +36,10 @@ export default function AudioPlayer({
 
   useEffect(() => {
     if (autoPlay && audioUri && !disabled && player) {
-      playAudio();
+      // Add a small delay to ensure the player is ready
+      setTimeout(() => {
+        playAudio();
+      }, 100);
     }
   }, [audioUri, autoPlay, disabled, player]);
 
@@ -95,7 +98,7 @@ export default function AudioPlayer({
         await player.play();
       }
     } catch (error) {
-      console.error('Error playing audio:', error);
+      console.error('🎵 AudioPlayer: Error playing audio:', error);
       onPlayStateChange?.(false);
     } finally {
       if (isMountedRef.current) {
