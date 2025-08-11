@@ -197,8 +197,6 @@ export default function StudyScreen() {
   // Get current card and progress from FSRS
   const currentCard = fsrsCurrentCard;
   const progress = fsrsProgress;
-  const totalCards = studyCards.length;
-  const currentIndex = fsrsCardIndex;
 
   const handleFlip = () => {
     setIsFlipped(!isFlipped);
@@ -206,7 +204,6 @@ export default function StudyScreen() {
     // Don't force stop audio playing state - let AudioPlayer handle autoplay
     
     if (!isFlipped) {
-      // Card was flipped to answer side - always show FSRS rating buttons
       setShowRatingButtons(true);
       setReviewStartTime(new Date());
       loadReviewOptions();
@@ -356,7 +353,7 @@ export default function StudyScreen() {
 
       {/* Audio Player */}
       {settings.enabled && (isFlipped ? currentCard?.answerAudio : currentCard?.questionAudio) && (
-        <View style={styles.audioContainer}>
+        <View style={[styles.audioContainer, { display: 'none' }]}>
           <AudioPlayer
             audioUri={isFlipped ? currentCard?.answerAudio : currentCard?.questionAudio}
             autoPlay={true} // Always autoplay when TTS is enabled
@@ -441,8 +438,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   progressBar: {
-    height: 8,
-    borderRadius: 4,
+    height: 8
   },
   fsrsContainer: {
     marginBottom: 16,

@@ -83,6 +83,11 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       console.log('Debouncing start session call');
       return false;
     }
+    // Don't start if still loading
+    if (loading) {
+      console.log('Still loading cards, cannot start session yet');
+      return false;
+    }
     lastStartAttempt.current = now;
 
     // Prevent multiple simultaneous calls
@@ -91,11 +96,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       return false;
     }
 
-    // Don't start if still loading
-    if (loading) {
-      console.log('Still loading cards, cannot start session yet');
-      return false;
-    }
+
 
     try {
       setIsStartingSession(true);
@@ -300,7 +301,8 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
 
   // Current card and session info
   const currentCard = studyCards[currentCardIndex] || null;
-  const progress = studyCards.length > 0 ? (currentCardIndex + 1) / studyCards.length : 0;
+  // Fix progress calculation: show how many cards have been COMPLETED, not just started
+  const progress = studyCards.length > 0 ? currentCardIndex / studyCards.length : 0;
   const isLastCard = currentCardIndex === studyCards.length - 1;
   const cardsRemaining = studyCards.length - currentCardIndex - 1;
 
