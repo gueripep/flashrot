@@ -1,5 +1,5 @@
 import { aiService } from '@/services/aiService';
-import { fsrsService, EnhancedFlashCard } from '@/services/fsrsService';
+import { EnhancedFlashCard, fsrsService } from '@/services/fsrsService';
 import { ttsService } from '@/services/ttsService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';

@@ -3,12 +3,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { Alert, BackHandler, StyleSheet, View } from 'react-native';
 import {
-    Button,
-    IconButton,
-    Modal,
-    Portal,
-    ProgressBar,
-    Text
+  Button,
+  IconButton,
+  Modal,
+  Portal,
+  ProgressBar,
+  Text
 } from 'react-native-paper';
 
 import FSRSRatingButtons from '@/components/FSRSRatingButtons';
@@ -322,15 +322,6 @@ export default function FSRSStudyScreen() {
               reviewOptions={reviewOptions}
               showPreview={true}
             />
-          </View>
-        )}
-
-        {/* Study hint */}
-        {!isFlipped && (
-          <View style={styles.hintContainer}>
-            <Text variant="bodyMedium" style={[styles.hint, { color: textColor }]}>
-              Think about the answer, then tap the card to reveal it
-            </Text>
           </View>
         )}
       </View>

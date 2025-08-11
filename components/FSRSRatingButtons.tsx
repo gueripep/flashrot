@@ -59,11 +59,6 @@ export default function FSRSRatingButtons({
 
   return (
     <View style={styles.container}>
-      {showPreview && (
-        <Text variant="bodySmall" style={[styles.hint, { color: textColor }]}>
-          Rate your recall difficulty:
-        </Text>
-      )}
       
       <View style={styles.buttonContainer}>
         {ratingData.map(({ rating, label, color, description }) => {
@@ -99,12 +94,6 @@ export default function FSRSRatingButtons({
           );
         })}
       </View>
-      
-      {showPreview && (
-        <Text variant="bodySmall" style={[styles.previewHint, { color: textColor }]}>
-          Next review intervals shown below each button
-        </Text>
-      )}
     </View>
   );
 }

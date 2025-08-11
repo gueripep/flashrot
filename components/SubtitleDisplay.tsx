@@ -101,9 +101,7 @@ export default function SubtitleDisplay({
             return;
         }
 
-        // Find which words should be highlighted based on current time
-        // Note: We highlight words based on currentTime regardless of playing state
-        // so users can see which word corresponds to the current audio position
+
         const highlighted = new Set<number>();
         timingData.word_timings?.forEach((wordTiming, index) => {
             // Calculate end time from start_time + duration, or use end_time if available
@@ -169,20 +167,14 @@ export default function SubtitleDisplay({
     };
 
     const renderTextWithHighlight = () => {
-        // Don't render anything until we're ready
         if (!isReady) {
-            return null;
-        }
-
-        // If timing data is not available, render nothing.
-        if (!timingData || !timingData.word_timings || timingData.word_timings.length === 0) {
             return null;
         }
 
         const { words: currentChunk, startIndex } = getCurrentSubtitleChunk();
 
         // If we have timing data but no current chunk, show the first chunk
-        if (currentChunk.length === 0 && timingData.word_timings.length > 0) {
+        if (currentChunk.length === 0 && timingData && timingData.word_timings.length > 0) {
             const firstChunk = timingData.word_timings.slice(0, Math.min(4, timingData.word_timings.length));
             return (
                 <View style={styles.wordContainer}>
@@ -226,11 +218,6 @@ export default function SubtitleDisplay({
         <View style={styles.container}>
             <View style={styles.subtitleContainer}>
                 {renderTextWithHighlight()}
-                {timingData && !showFullText && (
-                    <Text variant="bodySmall" style={[styles.hint, { color: 'white' }]}>
-                        {isPlaying ? 'Following audio...' : 'Press play to see highlighted words'}
-                    </Text>
-                )}
             </View>
         </View>
     );

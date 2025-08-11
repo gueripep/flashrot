@@ -91,8 +91,6 @@ export default function StudyScreen() {
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
-  const errorColor = useThemeColor({}, 'error');
-  const successColor = useThemeColor({}, 'success');
   const { settings } = useTTS();
 
   
@@ -119,7 +117,6 @@ export default function StudyScreen() {
   
   // Local state for study interface
   const [currentDeck, setCurrentDeck] = useState<Deck | null>(null);
-  const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [studyComplete, setStudyComplete] = useState(false);
   const [correctCount, setCorrectCount] = useState(0);
@@ -129,7 +126,6 @@ export default function StudyScreen() {
   const [showRatingButtons, setShowRatingButtons] = useState(false);
   const [reviewOptions, setReviewOptions] = useState<any>(null);
   const [reviewStartTime, setReviewStartTime] = useState<Date | null>(null);
-  const [useFSRS, setUseFSRS] = useState(false);
 
   const loading = decksLoading || cardsLoading || fsrsLoading;
 
@@ -162,22 +158,19 @@ export default function StudyScreen() {
     }
   }, [id, decks, cards]);
 
-  // Initialize FSRS study session if mode is specified
+  // Initialize FSRS study session
   useEffect(() => {
-    if (mode && id && cards.length > 0 && !isStudyActive) {
-      setUseFSRS(true);
-      const studyMode =  (mode as 'review' | 'all' | 'new') || 'review';
+    if (id && cards.length > 0 && !isStudyActive) {
+      const studyMode = (mode as 'review' | 'all' | 'new') || 'review';
       startStudySession({ mode: studyMode });
-    } else if (!mode) {
-      setUseFSRS(false);
     }
-  }, [id, cards, mode, isStudyActive, startStudySession]);
+  }, [id, cards, isStudyActive, startStudySession]);
 
   // Load timing data when card changes
   useEffect(() => {
     const loadTimingData = async () => {
-      // Use FSRS current card if FSRS is active, otherwise use regular cards
-      const currentCard = useFSRS ? fsrsCurrentCard : cards[currentCardIndex];
+      // Always use FSRS current card
+      const currentCard = fsrsCurrentCard;
       if (!currentCard) return;
 
       setTimingData(null);
@@ -199,21 +192,21 @@ export default function StudyScreen() {
     };
 
     loadTimingData();
-  }, [useFSRS ? fsrsCardIndex : currentCardIndex, isFlipped, cards, fsrsCurrentCard, useFSRS]);
+  }, [fsrsCardIndex, isFlipped, fsrsCurrentCard]);
 
-  // Get current card and progress based on mode
-  const currentCard = useFSRS ? fsrsCurrentCard : cards[currentCardIndex];
-  const progress = useFSRS ? fsrsProgress : (cards.length > 0 ? (currentCardIndex / cards.length) : 0);
-  const totalCards = useFSRS ? studyCards.length : cards.length;
-  const currentIndex = useFSRS ? fsrsCardIndex : currentCardIndex;
+  // Get current card and progress from FSRS
+  const currentCard = fsrsCurrentCard;
+  const progress = fsrsProgress;
+  const totalCards = studyCards.length;
+  const currentIndex = fsrsCardIndex;
 
   const handleFlip = () => {
     setIsFlipped(!isFlipped);
     setAudioPosition(0);
     // Don't force stop audio playing state - let AudioPlayer handle autoplay
     
-    if (!isFlipped && useFSRS) {
-      // Card was flipped to answer side in FSRS mode
+    if (!isFlipped) {
+      // Card was flipped to answer side - always show FSRS rating buttons
       setShowRatingButtons(true);
       setReviewStartTime(new Date());
       loadReviewOptions();
@@ -221,14 +214,14 @@ export default function StudyScreen() {
   };
 
   const loadReviewOptions = async () => {
-    if (currentCard && useFSRS) {
+    if (currentCard) {
       const options = await getReviewOptions(currentCard.id);
       setReviewOptions(options);
     }
   };
 
   const handleFSRSRating = async (rating: Rating) => {
-    if (!currentCard || !reviewStartTime || !useFSRS) return;
+    if (!currentCard || !reviewStartTime) return;
 
     const timeTaken = (new Date().getTime() - reviewStartTime.getTime()) / 1000;
     const wasCorrect = rating >= Rating.Good;
@@ -261,38 +254,13 @@ export default function StudyScreen() {
     }
   };
 
-  const handleAnswer = (isCorrect: boolean) => {
-    if (useFSRS) {
-      // In FSRS mode, use rating buttons instead
-      return;
-    }
-    
-    if (isCorrect) {
-      setCorrectCount(prev => prev + 1);
-    }
-
-    // Move to next card (legacy mode)
-    if (cards.length > 0 && currentCardIndex < cards.length - 1) {
-      setCurrentCardIndex(prev => prev + 1);
-      setIsFlipped(false);
-      setAudioPosition(0);
-      // Don't force audio playing state - let AudioPlayer handle it
-    } else {
-      setStudyComplete(true);
-    }
-  };
-
   const handleRestart = () => {
-    if (useFSRS) {
-      // Restart FSRS session
-      const studyMode = (mode as 'review' | 'all' | 'new') || 'review';
-      startStudySession({ mode: studyMode });
-      setShowRatingButtons(false);
-      setReviewOptions(null);
-      setReviewStartTime(null);
-    } else {
-      setCurrentCardIndex(0);
-    }
+    // Always restart FSRS session
+    const studyMode = (mode as 'review' | 'all' | 'new') || 'review';
+    startStudySession({ mode: studyMode });
+    setShowRatingButtons(false);
+    setReviewOptions(null);
+    setReviewStartTime(null);
     
     setIsFlipped(false);
     setStudyComplete(false);
@@ -333,13 +301,13 @@ export default function StudyScreen() {
   }
 
   if (studyComplete) {
-    const totalStudied = useFSRS ? studyCards.length : cards.length;
+    const totalStudied = studyCards.length;
     const accuracy = Math.round((correctCount / totalStudied) * 100);
     
     return (
       <FullScreenContainer>
         <View style={styles.completionContainer}>
-          <AntDesign name="checkcircle" size={64} color={successColor} />
+          <AntDesign name="checkcircle" size={64} color={tintColor} />
           <Text variant="headlineMedium" style={{ color: textColor, marginTop: 16, textAlign: 'center' }}>
             Study Complete!
           </Text>
@@ -350,11 +318,9 @@ export default function StudyScreen() {
             {accuracy}% Accuracy
           </Text>
           
-          {useFSRS && (
-            <Text variant="bodyMedium" style={{ color: textColor, marginTop: 8, textAlign: 'center', opacity: 0.8 }}>
-              {useFSRS && cardsRemaining > 0 && `${cardsRemaining} cards scheduled for later review`}
-            </Text>
-          )}
+          <Text variant="bodyMedium" style={{ color: textColor, marginTop: 8, textAlign: 'center', opacity: 0.8 }}>
+            {cardsRemaining > 0 && `${cardsRemaining} cards scheduled for later review`}
+          </Text>
           
           <View style={styles.completionButtons}>
             <Button mode="outlined" onPress={handleRestart} style={styles.button}>
@@ -373,10 +339,6 @@ export default function StudyScreen() {
     <FullScreenContainer>
       {/* Progress Bar */}
       <View style={styles.progressContainer}>
-        <Text variant="bodyMedium" style={{ color: textColor, marginBottom: 8 }}>
-          Card {currentIndex + 1} of {totalCards}
-          {useFSRS && cardsRemaining > 0 && ` • ${cardsRemaining} remaining`}
-        </Text>
         <ProgressBar progress={progress} color={tintColor} style={styles.progressBar} />
       </View>
 
@@ -419,49 +381,14 @@ export default function StudyScreen() {
         </View>
       )}
 
-      {/* Action Buttons */}
-      {isFlipped && !useFSRS && (
-        <View style={styles.actionButtons}>
-          <Text variant="bodyMedium" style={{ color: textColor, textAlign: 'center', marginBottom: 16 }}>
-            How well did you know this?
-          </Text>
-          <View style={styles.buttonRow}>
-            <Button
-              mode="contained"
-              onPress={() => handleAnswer(false)}
-              style={[styles.answerButton, { backgroundColor: errorColor }]}
-              labelStyle={{ color: 'white' }}
-            >
-              Need Practice
-            </Button>
-            <Button
-              mode="contained"
-              onPress={() => handleAnswer(true)}
-              style={[styles.answerButton, { backgroundColor: successColor }]}
-              labelStyle={{ color: 'white' }}
-            >
-              Got It!
-            </Button>
-          </View>
-        </View>
-      )}
-
       {/* FSRS Rating Buttons */}
-      {isFlipped && useFSRS && showRatingButtons && (
+      {isFlipped && showRatingButtons && (
         <View style={styles.fsrsContainer}>
           <FSRSRatingButtons
             onRate={handleFSRSRating}
             reviewOptions={reviewOptions}
             showPreview={true}
           />
-        </View>
-      )}
-
-      {!isFlipped && (
-        <View style={styles.hintContainer}>
-          <Text variant="bodyMedium" style={{ color: textColor, opacity: 0.6, textAlign: 'center' }}>
-            Think about your answer, then tap to reveal
-          </Text>
         </View>
       )}
     </FullScreenContainer>
@@ -504,20 +431,8 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
-  actionButtons: {
-    marginBottom: 16,
-  },
   fsrsContainer: {
     marginBottom: 16,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  answerButton: {
-    flex: 1,
-    paddingVertical: 4,
   },
   hintContainer: {
     marginBottom: 32,
