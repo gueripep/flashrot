@@ -13,7 +13,6 @@ export interface StudyStats {
   learningCards: number;
   reviewCards: number;
   dueCards: number;
-  avgRetention: number;
 }
 
 export interface StudyModeOptions {

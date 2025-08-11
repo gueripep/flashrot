@@ -346,7 +346,6 @@ class FSRSService {
         learningCards: number;
         reviewCards: number;
         dueCards: number;
-        avgRetention: number;
     }> {
         const cards = await this.loadCardsFromDeck(deckId);
         console.log('Deck Cards:', cards);
@@ -375,8 +374,6 @@ class FSRSService {
             }
         }
 
-        // Calculate average retention (simplified)
-        const avgRetention = await this.calculateAverageRetention(deckId);
 
         return {
             totalCards,
@@ -384,7 +381,6 @@ class FSRSService {
             learningCards,
             reviewCards,
             dueCards,
-            avgRetention
         };
     }
 
@@ -528,12 +524,6 @@ class FSRSService {
         } catch (error) {
             console.error('Error recording review:', error);
         }
-    }
-
-    private async calculateAverageRetention(deckId: string): Promise<number> {
-        // Simplified retention calculation
-        // In a real implementation, you'd analyze review history
-        return 0.85; // 85% default retention
     }
 
     private async getDailyProgress(): Promise<{ date: string, newCardsStudied: number }> {

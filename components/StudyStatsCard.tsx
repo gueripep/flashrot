@@ -147,11 +147,6 @@ export default function StudyStatsCard({ stats, loading = false }: StudyStatsCar
     return warningColor;
   };
 
-  const getRetentionColor = (retention: number) => {
-    return retention >= 0.8 ? successColor : 
-           retention >= 0.6 ? warningColor : errorColor;
-  };
-
 
   const isInitialLoad = !stats;
   const isRefreshing = loading && !!stats;
@@ -159,14 +154,11 @@ export default function StudyStatsCard({ stats, loading = false }: StudyStatsCar
     totalCards: 0,
     dueCards: 0,
     newCards: 0,
-    avgRetention: 0,
     learningCards: 0,
     reviewCards: 0
   };
 
   const dueCardsColor = isInitialLoad ? tintColor : getStatusColor(safeStats.dueCards, safeStats.totalCards);
-  const retentionColor = isInitialLoad ? tintColor : getRetentionColor(safeStats.avgRetention);
-  const retentionValue = isInitialLoad ? '--%' : `${Math.round(safeStats.avgRetention * 100)}%`;
   
   const learningProgress = safeStats.totalCards > 0 ? (safeStats.learningCards / safeStats.totalCards) * 100 : 0;
   const reviewProgress = safeStats.totalCards > 0 ? (safeStats.reviewCards / safeStats.totalCards) * 100 : 0;
@@ -197,12 +189,7 @@ export default function StudyStatsCard({ stats, loading = false }: StudyStatsCar
             color={tintColor}
             isLoading={isInitialLoad}
           />
-          <StatItem
-            value={retentionValue}
-            label="Retention"
-            color={retentionColor}
-            isLoading={isInitialLoad}
-          />
+
         </View>
 
         <View style={styles.progressGrid}>
