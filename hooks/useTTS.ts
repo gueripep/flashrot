@@ -18,11 +18,12 @@ export function useTTS() {
     try {
       setLoading(true);
       const settingsString = await AsyncStorage.getItem('tts_settings');
+      const apiKey = await AsyncStorage.getItem('gemini_api_key');
       const savedSettings = settingsString ? JSON.parse(settingsString) : {};
 
       const newSettings = {
         enabled: savedSettings.enabled ?? false,
-        apiKeySet: true, // Always true with local server
+        apiKeySet: !!apiKey, // True if API key exists
       };
 
       setSettings(newSettings);

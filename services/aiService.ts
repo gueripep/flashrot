@@ -1,5 +1,3 @@
-import { GoogleGenAI } from '@google/genai';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface GenerationOptions {
   model?: string;
@@ -8,37 +6,22 @@ interface GenerationOptions {
 }
 
 class AIService {
-  private ai: GoogleGenAI | null = null;
-  private initialized = false;
+  private baseUrl = 'http://192.168.1.3:8000';
   private readonly defaultModel = 'gemini-2.0-flash';
 
-  private async initialize(): Promise<void> {
-    if (this.initialized) return;
-    try {
-      const apiKey = await AsyncStorage.getItem('gemini_api_key');
-      if (apiKey) {
-        this.ai = new GoogleGenAI({ apiKey });
-      }
-    } catch (e) {
-      console.warn('AI init failed:', e);
-    } finally {
-      this.initialized = true;
-    }
-  }
-
   private async generateContent(prompt: string, options: GenerationOptions = {}): Promise<string | null> {
-    await this.initialize();
-    if (!this.ai) return null;
-
     try {
-      const result: any = await this.ai.models.generateContent({
-        model: options.model || this.defaultModel,
-        contents: [
-          { role: 'user', parts: [{ text: prompt }] },
-        ],
+      const response: any = await fetch(`${this.baseUrl}/gemini/generate/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt }), // Change 'request' to 'prompt'
       });
-
-      const text = this.extractTextFromResult(result);
+      const jsonResponse = await response.json();
+      const text = jsonResponse?.content ?? null;
+      console.log('AI generation response:', jsonResponse);
+      // const text = this.extractTextFromResult(result);
       if (!text) return null;
       return String(text).trim();
     } catch (error) {
@@ -55,6 +38,14 @@ class AIService {
       result?.output_text ??
       null
     );
+  }
+
+  private removeMarkdownCodeBlocks(text: string): string {
+    // Remove ```xml and ``` code block markers
+    return text
+      .replace(/```xml\s*/gi, '')
+      .replace(/```\s*/g, '')
+      .trim();
   }
 
   async generateAnswer(question: string, options: GenerationOptions = {}): Promise<string | null> {
@@ -94,8 +85,12 @@ class AIService {
       throw new Error('Failed to generate discussion');
     }
 
-    return discussion;
+    // Remove markdown code blocks if present
+    const cleanedDiscussion = this.removeMarkdownCodeBlocks(discussion);
+    return cleanedDiscussion;
   }
 }
+
+
 
 export const aiService = new AIService();

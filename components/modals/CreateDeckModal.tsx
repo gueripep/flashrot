@@ -36,7 +36,6 @@ export default function CreateDeckModal({ visible, onDismiss, onCreateDeck }: Cr
         createdAt: new Date().toISOString(),
       };
       onCreateDeck(newDeck);
-      Alert.alert('Success', `Created deck: "${deckName}"`);
       handleClose();
     } else {
       Alert.alert('Error', 'Please enter a deck name');

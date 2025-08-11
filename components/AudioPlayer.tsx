@@ -56,11 +56,23 @@ export default function AudioPlayer({
 
       try {
         // More defensive checks before accessing player properties
-        if (player && typeof player === 'object' && 'playing' in player && 'currentTime' in player) {
-          const isPlaying = player.playing;
-          if (isPlaying) {
-            const currentTime = player.currentTime || 0;
-            onPositionChange?.(currentTime);
+        if (player && 
+            typeof player === 'object' && 
+            'playing' in player && 
+            'currentTime' in player) {
+          
+          // Test if player is still accessible before reading properties
+          try {
+            const isPlaying = player.playing;
+            if (isPlaying) {
+              const currentTime = player.currentTime || 0;
+              onPositionChange?.(currentTime);
+            }
+          } catch (innerError) {
+            // Player might be released, clear interval and exit
+            console.warn('🎵 AudioPlayer: Player released during position tracking');
+            clearInterval(interval);
+            return;
           }
         }
       } catch (error) {
@@ -75,7 +87,14 @@ export default function AudioPlayer({
   useEffect(() => {
     try {
       if (player && typeof player === 'object' && 'playing' in player) {
-        onPlayStateChange?.(player.playing || false);
+        // Test if player is still accessible before reading playing state
+        try {
+          const playingState = player.playing || false;
+          onPlayStateChange?.(playingState);
+        } catch (innerError) {
+          console.warn('🎵 AudioPlayer: Player released during state check');
+          onPlayStateChange?.(false);
+        }
       } else {
         onPlayStateChange?.(false);
       }
@@ -93,9 +112,22 @@ export default function AudioPlayer({
       // Reset position when starting to play
       onPositionChange?.(0);
       
-      // Check if player is still valid before calling play
-      if (player && typeof player === 'object' && 'play' in player) {
-        await player.play();
+      // Additional validation to check if player is still valid
+      if (player && 
+          typeof player === 'object' && 
+          'play' in player && 
+          typeof player.play === 'function') {
+        
+        // Check if the player is not already released by testing a property access
+        try {
+          // Test if we can access player properties without throwing
+          const testAccess = player.currentTime;
+          await player.play();
+        } catch (innerError) {
+          console.warn('🎵 AudioPlayer: Player appears to be released, skipping play');
+          onPlayStateChange?.(false);
+          return;
+        }
       }
     } catch (error) {
       console.error('🎵 AudioPlayer: Error playing audio:', error);
@@ -111,8 +143,19 @@ export default function AudioPlayer({
     if (!isMountedRef.current) return;
     
     try {
-      if (player && typeof player === 'object' && 'pause' in player) {
-        player.pause();
+      if (player && 
+          typeof player === 'object' && 
+          'pause' in player && 
+          typeof player.pause === 'function') {
+        
+        // Test if player is still valid before pausing
+        try {
+          const testAccess = player.currentTime;
+          player.pause();
+        } catch (innerError) {
+          console.warn('🎵 AudioPlayer: Player appears to be released, skipping pause');
+          onPlayStateChange?.(false);
+        }
       }
     } catch (error) {
       console.error('Error pausing audio:', error);
@@ -127,7 +170,15 @@ export default function AudioPlayer({
       // Safely check if player is playing
       let isCurrentlyPlaying = false;
       if (player && typeof player === 'object' && 'playing' in player) {
-        isCurrentlyPlaying = player.playing;
+        try {
+          // Test player accessibility before reading state
+          const testAccess = player.currentTime;
+          isCurrentlyPlaying = player.playing;
+        } catch (innerError) {
+          console.warn('🎵 AudioPlayer: Player released during press handler');
+          onPlayStateChange?.(false);
+          return;
+        }
       }
       
       if (isCurrentlyPlaying) {
@@ -149,7 +200,14 @@ export default function AudioPlayer({
   let isPlaying = false;
   try {
     if (player && typeof player === 'object' && 'playing' in player) {
-      isPlaying = player.playing || false;
+      try {
+        // Test player accessibility before reading state
+        const testAccess = player.currentTime;
+        isPlaying = player.playing || false;
+      } catch (innerError) {
+        console.warn('🎵 AudioPlayer: Player released during render state check');
+        isPlaying = false;
+      }
     }
   } catch (error) {
     console.error('Error checking playing state:', error);
