@@ -2,7 +2,7 @@ import { useThemeColor } from '@/hooks/useThemeColor';
 import { useTTS } from '@/hooks/useTTS';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
-import { Button, List, Portal, Switch, Text, TextInput } from 'react-native-paper';
+import { Button, Portal, Text, TextInput } from 'react-native-paper';
 
 interface AddCardModalProps {
   visible: boolean;
@@ -129,21 +129,6 @@ export default function AddCardModal({
                   placeholder="Enter the answer or explanation..."
                   contentStyle={styles.inputContent}
                 />
-                {/* TTS Option */}
-                {settings.enabled && mode === 'add' && (
-                  <List.Item
-                    title="Generate Audio"
-                    description="Create TTS audio for question and answer"
-                    left={props => <List.Icon {...props} icon="volume-high" />}
-                    right={() => (
-                      <Switch
-                        value={generateAudio}
-                        onValueChange={setGenerateAudio}
-                      />
-                    )}
-                    style={{ marginBottom: 16 }}
-                  />
-                )}
               </View>
               <View style={styles.modalButtons}>
                 <Button

@@ -27,7 +27,7 @@ export function useCards(deckId: string) {
     const validatedCards = await Promise.all(
       cards.map(async (card) => {
         const validatedCard = { ...card };
-        
+
         // Check if question audio file exists
         if (card.questionAudio) {
           try {
@@ -41,7 +41,7 @@ export function useCards(deckId: string) {
             console.warn(`Error checking question audio for card ${card.id}:`, error);
           }
         }
-        
+
         // Check if answer audio file exists
         if (card.answerAudio) {
           try {
@@ -55,11 +55,11 @@ export function useCards(deckId: string) {
             console.warn(`Error checking answer audio for card ${card.id}:`, error);
           }
         }
-        
+
         return validatedCard;
       })
     );
-    
+
     return validatedCards;
   };
 
@@ -69,7 +69,7 @@ export function useCards(deckId: string) {
       const storedCards = await AsyncStorage.getItem(STORAGE_KEY);
       if (storedCards) {
         const parsedCards: EnhancedFlashCard[] = JSON.parse(storedCards);
-        
+
         // Ensure FSRS dates are properly converted to Date objects and add FSRS data if missing
         const processedCards = await Promise.all(
           parsedCards.map(async (card) => {
@@ -89,22 +89,22 @@ export function useCards(deckId: string) {
             return card;
           })
         );
-        
+
         // Validate that audio files still exist and clean up broken references
         const validatedCards = await validateAudioFiles(processedCards);
-        
+
         // Save back to storage if any audio references were cleaned up or FSRS data was added
-        const hasChanges = validatedCards.some((card, index) => 
+        const hasChanges = validatedCards.some((card, index) =>
           card.questionAudio !== parsedCards[index]?.questionAudio ||
           card.answerAudio !== parsedCards[index]?.answerAudio ||
           !parsedCards[index]?.fsrs
         );
-        
+
         if (hasChanges) {
           await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(validatedCards));
           console.log('Updated cards with FSRS data and cleaned up broken audio references for deck:', deckId);
         }
-        
+
         setCards(validatedCards);
       } else {
         // No cards found, initialize with empty array
@@ -118,7 +118,7 @@ export function useCards(deckId: string) {
     }
   };
 
-  const saveCard = async (front: string, back: string, generateAudio: boolean = true) => {
+  const saveCard = async (front: string, back: string) => {
     try {
       // Create the basic card first
       const baseCard: FlashCard = {
@@ -128,31 +128,21 @@ export function useCards(deckId: string) {
         createdAt: new Date().toISOString(),
         deckId
       };
-      
+
       // Create FSRS data for the new card
       const fsrsData = fsrsService.createNewFSRSCard(baseCard.id, deckId);
-      
+
       // Create the enhanced card with FSRS data
-      const newCard: EnhancedFlashCard = {
+      let finalCard: EnhancedFlashCard = {
         ...baseCard,
         fsrs: fsrsData
       };
-      
-      const updatedCards = [...cards, newCard];
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
-      setCards(updatedCards);
 
       // Wait for AI reformulation of the answer (back) before generating TTS
-      let finalCard = newCard;
       try {
-        const reformulated = await aiService.reformulateAnswer(newCard.front, newCard.back);
-        if (reformulated && reformulated !== newCard.back) {
-          finalCard = { ...newCard, back: reformulated };
-          const refinedCards = updatedCards.map(c =>
-            c.id === newCard.id ? finalCard : c
-          );
-          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(refinedCards));
-          setCards(refinedCards);
+        const reformulated = await aiService.reformulateAnswer(finalCard.front, finalCard.back);
+        if (reformulated && reformulated !== finalCard.back) {
+          finalCard = { ...finalCard, back: reformulated };
         }
       } catch (err) {
         console.warn('AI reformulation error:', err);
@@ -160,36 +150,31 @@ export function useCards(deckId: string) {
       }
 
       // Generate TTS audio using the final (potentially reformulated) text
-      if (generateAudio) {
-        try {
-          const audioData = await ttsService.generateCardAudio(
-            finalCard.id,
-            finalCard.front,
-            finalCard.back 
-          );
-          
-          // Update the card with audio file paths directly
-          if (audioData.questionAudio || audioData.answerAudio) {
-            finalCard = {
-              ...finalCard,
-              questionAudio: audioData.questionAudio || undefined,
-              answerAudio: audioData.answerAudio || undefined
-            };
-            
-            // Update the cards array with the final card including audio paths
-            const cardsWithAudio = updatedCards.map(card => 
-              card.id === newCard.id ? finalCard : card
-            );
-            
-            await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(cardsWithAudio));
-            setCards(cardsWithAudio);
-          }
-        } catch (audioError) {
-          console.warn('Failed to generate audio for card:', audioError);
-          // Don't fail the card creation if audio generation fails
+      try {
+        const audioData = await ttsService.generateCardAudio(
+          finalCard.id,
+          finalCard.front,
+          finalCard.back
+        );
+
+        // Add audio file paths to the final card
+        if (audioData.questionAudio || audioData.answerAudio) {
+          finalCard = {
+            ...finalCard,
+            questionAudio: audioData.questionAudio || undefined,
+            answerAudio: audioData.answerAudio || undefined
+          };
         }
+      } catch (audioError) {
+        console.warn('Failed to generate audio for card:', audioError);
+        // Continue without audio - don't fail the card creation
       }
-      
+
+      // Only save the card after all processing is complete
+      const updatedCards = [...cards, finalCard];
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
+      setCards(updatedCards);
+
       return true;
     } catch (error) {
       console.error('Error saving card:', error);
@@ -203,14 +188,14 @@ export function useCards(deckId: string) {
       console.log('Deleting card:', cardId);
       // Find the card to get audio file paths
       const cardToDelete = cards.find(card => card.id === cardId);
-      
+
       // Delete associated audio files
       await ttsService.deleteCardAudio(
-        cardId, 
-        cardToDelete?.questionAudio, 
+        cardId,
+        cardToDelete?.questionAudio,
         cardToDelete?.answerAudio
       );
-      
+
       const updatedCards = cards.filter(card => card.id !== cardId);
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
       setCards(updatedCards);
@@ -224,8 +209,8 @@ export function useCards(deckId: string) {
 
   const updateCard = async (cardId: string, front: string, back: string) => {
     try {
-      const updatedCards = cards.map(card => 
-        card.id === cardId 
+      const updatedCards = cards.map(card =>
+        card.id === cardId
           ? { ...card, front: front.trim(), back: back.trim() }
           : card
       );

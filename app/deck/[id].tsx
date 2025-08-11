@@ -136,12 +136,12 @@ export default function DeckScreen() {
     setShowDeleteModal(true);
   };
 
-  const handleSaveCard = async (front: string, back: string, generateAudio: boolean = true) => {
+  const handleSaveCard = async (front: string, back: string) => {
     let result;
     if (editingCard) {
       result = await updateCard(editingCard.id, front, back);
     } else {
-      result = await saveCard(front, back, generateAudio);
+      result = await saveCard(front, back);
     }
 
     // Refresh FSRS data after card operation (but only for new cards)
