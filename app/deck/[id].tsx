@@ -5,6 +5,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import { Button, Card, Chip, FAB, Text } from 'react-native-paper';
 
+import DebugPanel from '@/components/DebugPanel';
 import EmptyCardState from '@/components/EmptyCardState';
 import FlashCardItem from '@/components/FlashCardItem';
 import StudyStatsCard from '@/components/StudyStatsCard';
@@ -231,7 +232,7 @@ export default function DeckScreen() {
   return (
     <>
       <ScrollView style={{ backgroundColor, padding: 16 }}>
-        {/* <DebugPanel deckId={id || ''} allCards={cards} /> */}
+        <DebugPanel deckId={id || ''} allCards={cards} />
 
         {/* Header */}
         <Card style={[styles.headerCard, { backgroundColor: cardBackgroundColor }]}>

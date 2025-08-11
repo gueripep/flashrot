@@ -7,6 +7,15 @@ import { Alert } from 'react-native';
 
 
 
+// Function to extract plain text from SSML string
+const extractTextFromSSML = (ssmlString: string): string => {
+  // Remove all SSML tags and extract just the text content
+  return ssmlString
+    .replace(/<[^>]*>/g, '') // Remove all XML/SSML tags
+    .replace(/\s+/g, ' ') // Replace multiple whitespace with single space
+    .trim(); // Remove leading/trailing whitespace
+};
+
 export function useCards(deckId: string) {
   const [cards, setCards] = useState<FlashCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,13 +78,14 @@ export function useCards(deckId: string) {
 
   const getDiscussion = async (front: string, back: string): Promise<Discussion> => {
     try {
-      const discussionSsml = await aiService.generateSSMLDiscussion(front, back);
+      const discussionSsml = await aiService.generateCourse(front, back);
+      const discussionText = extractTextFromSSML(discussionSsml);
       //generate audio for discussion
-      const audioData = await ttsService.generateTTS(discussionSsml, { is_ssml: true });
-
-
+      const audioData = await ttsService.generateTTS(discussionSsml);
+      console.log("discussion text:", discussionText);
       const discussion: Discussion = {
         ssmlText: discussionSsml,
+        text: discussionText,
         audioFile: audioData
       };
       console.log('Generated discussion:', discussion);

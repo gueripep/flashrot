@@ -30,16 +30,6 @@ class AIService {
     }
   }
 
-  private extractTextFromResult(result: any): string | null {
-    return (
-      result?.response?.candidates?.[0]?.content?.parts?.[0]?.text ??
-      result?.candidates?.[0]?.content?.parts?.[0]?.text ??
-      result?.response?.text?.() ??
-      result?.output_text ??
-      null
-    );
-  }
-
   private removeMarkdownCodeBlocks(text: string): string {
     // Remove ```xml and ``` code block markers
     return text
@@ -50,10 +40,9 @@ class AIService {
 
   async generateAnswer(question: string, options: GenerationOptions = {}): Promise<string | null> {
     const prompt = [
-      'Generate a clear, accurate, and concise answer for the following question.',
-      '- Keep the same language as the question.',
+      'Generate a short answer for the following question.',
       '- Plain text only, no lists or markdown formatting.',
-      `- Target 1-3 sentences (max ~${options.maxWords || 100} words).`,
+      `- Target 1 sentence (max ~${options.maxWords || 30} words).`,
       '- Be factual and educational.',
       '',
       `Question: ${question}`,
@@ -64,10 +53,9 @@ class AIService {
     return this.generateContent(prompt, options);
   }
 
-  async generateSSMLDiscussion(front: string, back: string, options: GenerationOptions = {}): Promise<string> {
+  async generateCourse(front: string, back: string, options: GenerationOptions = {}): Promise<string> {
     const prompt = [
-      'Create a short, engaging educational dialogue in SSML format about the topic in the flashcard.',
-      '- Use <voice name="en-US-Wavenet-A"> and <voice name="en-US-Wavenet-B"> for different speakers.',
+      'Create a short, engaging educational course about the topic in the flashcard.',
       `- Target 2–4 sentences (~${options.maxWords || 150} words).`,
       '- Structure:',
       '1. Hook or intriguing fact.',
@@ -77,7 +65,7 @@ class AIService {
       `Front of card: ${front}`,
       `Back of card: ${back}`,
       '',
-      'Generated SSML discussion:',
+      'Generated course:',
     ].join('\n');
 
     const discussion = await this.generateContent(prompt, options);

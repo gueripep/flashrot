@@ -32,16 +32,6 @@ class TTSService {
 
   constructor() { }
 
-  // Kept for compatibility (no-op)
-  async setApiKey(_apiKey: string) {
-    return;
-  }
-
-  // Kept for compatibility (no key needed)
-  async getApiKey(): Promise<string | null> {
-    return null;
-  }
-
   // Generate TTS using the new API
   async generateTTS(text: string, options?: Partial<TTSRequest>): Promise<string> {
     if (!text || !text.trim()) throw new Error('Text cannot be empty');

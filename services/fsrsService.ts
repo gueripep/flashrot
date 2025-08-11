@@ -44,6 +44,7 @@ export interface FinalCard {
 
 export interface Discussion {
     ssmlText: string;
+    text: string;
     audioFile?: string;
 }
 
@@ -328,8 +329,6 @@ class FSRSService {
 
         const now = new Date();
         const schedulingCards: RecordLog = this.fsrsInstance.repeat(fsrsCard, now);
-
-        console.log('Review options schedulingCards:', schedulingCards);
 
         // Check if schedulingCards is valid
         if (!schedulingCards) {

@@ -19,7 +19,6 @@ export default function FSRSRatingButtons({
 }: FSRSRatingButtonsProps) {
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
-  console.log('FSRSRatingButtons reviewOptions:', reviewOptions);
 
   const ratingData = [
     { 
@@ -63,7 +62,6 @@ export default function FSRSRatingButtons({
       <View style={styles.buttonContainer}>
         {ratingData.map(({ rating, label, color, description }) => {
           const interval = reviewOptions?.[rating]?.interval;
-          console.log('Interval for rating', rating, ':', interval);
           return (
             <View key={rating} style={styles.buttonWrapper}>
               <Button

@@ -4,7 +4,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { Button, IconButton, ProgressBar, Text } from 'react-native-paper';
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AudioPlayer from '@/components/AudioPlayer';
@@ -17,6 +19,7 @@ import { useThemeColor } from '@/hooks/useThemeColor';
 import { useTTS } from '@/hooks/useTTS';
 import { FlashCard, Stage } from '@/services/fsrsService';
 import { ttsService } from '@/services/ttsService';
+import { Gesture } from 'react-native-gesture-handler';
 
 interface Deck {
   id: string;
@@ -27,8 +30,8 @@ interface Deck {
 }
 
 // Background Video Component
-const BackgroundVideo = () => {
-  const player = useVideoPlayer(require('@/assets/videos/background-gameplay.webm'), player => {
+const BackgroundVideo = ({ animatedStyle }: { animatedStyle?: any }) => {
+  const player = useVideoPlayer(require('@/assets/videos/parkour.mp4'), player => {
     player.loop = true;
     player.muted = true;
     
@@ -56,18 +59,20 @@ const BackgroundVideo = () => {
   };
 
   return (
-    <VideoView
-      style={styles.backgroundVideo}
-      player={player}
-      allowsFullscreen={false}
-      allowsPictureInPicture={false}
-      nativeControls={false}
-      contentFit="cover"
-      {...(Platform.OS === 'web' && {
-        onPress: handleVideoPress,
-        pointerEvents: 'auto'
-      })}
-    />
+    <Animated.View style={[styles.backgroundVideoContainer, animatedStyle]}>
+      <VideoView
+        style={styles.backgroundVideo}
+        player={player}
+        allowsFullscreen={false}
+        allowsPictureInPicture={false}
+        nativeControls={false}
+        contentFit="cover"
+        {...(Platform.OS === 'web' && {
+          onPress: handleVideoPress,
+          pointerEvents: 'auto'
+        })}
+      />
+    </Animated.View>
   );
 };
 
@@ -91,6 +96,10 @@ export default function StudyScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
   const { settings } = useTTS();
+
+  // TikTok-style swipe animation values
+  const translateY = useSharedValue(0);
+  const nextCardTranslateY = useSharedValue(0); // Start from bottom of screen
 
   
   const { decks, loading: decksLoading } = useDecks();
@@ -126,8 +135,124 @@ export default function StudyScreen() {
   const [reviewOptions, setReviewOptions] = useState<any>(null);
   const [reviewStartTime, setReviewStartTime] = useState<Date | null>(null);
   const [isDiscussionStage, setIsDiscussionStage] = useState(false);
+  const [isProcessingRating, setIsProcessingRating] = useState(false);
 
   const loading = decksLoading || cardsLoading || fsrsLoading;
+
+  // TikTok-style swipe gesture for "Good" rating
+  const handleSwipeUp = () => {
+    console.log('👆 StudyScreen: handleSwipeUp called', { isFlipped, showRatingButtons, isDiscussionStage, isProcessingRating });
+    try {
+      if (isProcessingRating) {
+        console.log('⚠️ StudyScreen: handleSwipeUp blocked - already processing rating');
+        return;
+      }
+      
+      if (!isFlipped || !showRatingButtons || isDiscussionStage) {
+        console.log('⚠️ StudyScreen: handleSwipeUp blocked - invalid state');
+        return;
+      }
+      
+      if (!currentCard || !reviewStartTime) {
+        console.log('⚠️ StudyScreen: handleSwipeUp blocked - missing data', { 
+          hasCurrentCard: !!currentCard, 
+          hasReviewStartTime: !!reviewStartTime 
+        });
+        return;
+      }
+      
+      setIsProcessingRating(true);
+      
+      // Trigger "Good" rating (Rating.Good = 2)
+      console.log('👍 StudyScreen: Triggering Good rating via swipe');
+      handleFSRSRating(Rating.Good);
+    } catch (error) {
+      console.error('❌ StudyScreen: Error in handleSwipeUp', error);
+      setIsProcessingRating(false);
+    }
+  };
+
+  // Create TikTok-style vertical swipe gesture
+  const swipeGesture = Gesture.Pan()
+    .onBegin(() => {
+      'worklet';
+    })
+    .onChange((event) => {
+      'worklet';
+      // Only respond to upward swipes when card is flipped and rating buttons are shown
+      if (!isFlipped || !showRatingButtons || isDiscussionStage) return;
+      
+      // Only allow upward swipes (negative Y)
+      if (event.translationY >= 0) return;
+      
+      // Calculate progress (0 to 1) based on swipe distance
+      const swipeThreshold = -100; // Swipe up 100px to trigger
+      const progress = Math.min(Math.abs(event.translationY) / Math.abs(swipeThreshold), 1);
+      
+      // Animate current card out
+      translateY.value = event.translationY;
+      // scale.value = 1 - progress * 0.1;
+      
+      // Animate next card preview in (from bottom)
+      // nextCardOpacity.value = progress * 0.5; // Slightly more visible
+      // nextCardTranslateY.value = 200 + (progress * 200); // Move from bottom (200) to center (0)
+    })
+    .onEnd((event) => {
+      'worklet';
+      console.log('🎭 StudyScreen: Swipe gesture ended');
+      try {
+        if (!isFlipped || !showRatingButtons || isDiscussionStage) return;
+        
+        const swipeThreshold = -100;
+        
+        if (event.translationY < swipeThreshold) {
+          // Swipe threshold reached - trigger good rating
+          translateY.value = withSpring(1000, { damping: 500, stiffness: 1000 });
+          
+          // Trigger the good rating immediately (no setTimeout in worklet)
+          runOnJS(handleSwipeUp)();
+        } else {
+          // Swipe not far enough - reset position
+          translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
+          nextCardTranslateY.value = withSpring(200, { damping: 20, stiffness: 300 }); // Reset to bottom
+        }
+      } catch (error) {
+        console.log('❌ StudyScreen: Error in swipe onEnd', error);
+      }
+    })
+    .activeOffsetY([-10, 10]) // Activate after 10px vertical movement
+    .failOffsetX([-20, 20]); // Fail if horizontal movement exceeds 20px
+
+  // Reset animation values when card changes
+  useEffect(() => {
+    console.log('🔄 StudyScreen: Resetting animation values', { fsrsCardIndex, isFlipped });
+    try {
+      translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
+      nextCardTranslateY.value = withSpring(200, { damping: 20, stiffness: 300 }); // Reset to bottom
+      console.log('✅ StudyScreen: Animation values reset successfully');
+    } catch (error) {
+      console.error('❌ StudyScreen: Error resetting animation values', error);
+    }
+  }, [fsrsCardIndex, isFlipped]);
+
+  // Animated styles for TikTok-style animations
+  const cardAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: translateY.value },
+    ],
+  }));
+
+  const nextCardAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: -nextCardTranslateY.value }
+    ],
+  }));
+
+  const backgroundVideoAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: translateY.value }, // Parallax effect
+    ],
+  }));
 
   // Set the header title dynamically
   useLayoutEffect(() => {
@@ -175,6 +300,9 @@ export default function StudyScreen() {
 
       // Check if we're in discussion stage
       const inDiscussionStage = currentCard.stage === Stage.Discussion;
+      if(inDiscussionStage){
+        console.log("currentCard.discussion.text:", currentCard.discussion.text);
+      }
       setIsDiscussionStage(inDiscussionStage);
 
       setTimingData(null);
@@ -286,22 +414,6 @@ export default function StudyScreen() {
     }
   };
 
-  const handleRestart = () => {
-    // Always restart FSRS session
-    const studyMode = (mode as 'review' | 'all' | 'new') || 'review';
-    startStudySession({ mode: studyMode });
-    setShowRatingButtons(false);
-    setReviewOptions(null);
-    setReviewStartTime(null);
-    
-    setIsFlipped(false);
-    setStudyComplete(false);
-    setCorrectCount(0);
-    setAudioPosition(0);
-    setIsDiscussionStage(false);
-    // Don't force audio playing state - let AudioPlayer handle it
-  };
-
   const handleFinish = () => {
     router.back();
   };
@@ -355,99 +467,132 @@ export default function StudyScreen() {
     );
   }
 
-  return (
-    <View style={styles.fullScreenContainer}>
-      <BackgroundVideo />
-      {/* Progress Bar - directly under header */}
-      <View style={styles.progressContainerFixed}>
-        <ProgressBar progress={progress} color={tintColor} style={styles.progressBar} />
-      </View>
-      
-      <SafeAreaView style={styles.safeAreaContainer}>
-        <View style={styles.container}>
-          {/* Subtitle Display */}
-          <SubtitleDisplay
-            text={isDiscussionStage 
-              ? currentCard?.discussion.ssmlText || '' 
-              : (isFlipped ? currentCard?.finalCard.back || '' : currentCard?.finalCard.front || '')
-            }
-            timingData={timingData}
-            currentTime={audioPosition}
-            isPlaying={isAudioPlaying}
-            showFullText={!settings.enabled || !timingData}
-          />
-
-          {/* Audio Player */}
-          {settings.enabled && (() => {
-            let audioUri: string | undefined;
-            let audioLabel: string;
-            
-            if (isDiscussionStage) {
-              audioUri = currentCard?.discussion.audioFile;
-              audioLabel = 'Discussion Audio';
-            } else {
-              audioUri = isFlipped ? currentCard?.finalCard.answerAudio : currentCard?.finalCard.questionAudio;
-              audioLabel = isFlipped ? 'Answer Audio' : 'Question Audio';
-            }
-            
-            return audioUri ? (
-              <View style={[styles.audioContainer, { display: 'none' }]}>
-                <AudioPlayer
-                  audioUri={audioUri}
-                  autoPlay={true} // Always autoplay when TTS is enabled
-                  size={24}
-                  onPositionChange={setAudioPosition}
-                  onPlayStateChange={setIsAudioPlaying}
-                />
-                <Text variant="bodySmall" style={{ color: textColor, textAlign: 'center', marginTop: 8 }}>
-                  {audioLabel}
-                </Text>
-              </View>
-            ) : null;
-          })()}
-
-          {/* Discussion Stage - Next Button */}
-          {isDiscussionStage && (
-            <View style={styles.flipContainer}>
-              <Button
-                mode="contained"
-                onPress={handleDiscussionNext}
-                style={[styles.flipButton, { backgroundColor: tintColor }]}
-                labelStyle={{ color: 'white' }}
-              >
-                Continue to Learning
-              </Button>
-            </View>
-          )}
-
-          {/* Learning Stage - Flip Button */}
-          {!isDiscussionStage && !isFlipped && (
-            <View style={styles.flipContainer}>
-              <Button
-                mode="contained"
-                onPress={handleFlip}
-                style={[styles.flipButton, { backgroundColor: tintColor }]}
-                labelStyle={{ color: 'white' }}
-              >
-                Reveal Answer
-              </Button>
-            </View>
-          )}
-
-          {/* FSRS Rating Buttons - Only in Learning Stage */}
-          {!isDiscussionStage && isFlipped && showRatingButtons && (
-            <View style={styles.fsrsContainer}>
-              <FSRSRatingButtons
-                onRate={handleFSRSRating}
-                reviewOptions={reviewOptions}
-                showPreview={true}
-              />
-            </View>
-          )}
+  try {
+    return (
+      <View style={styles.fullScreenContainer}>
+        <BackgroundVideo animatedStyle={backgroundVideoAnimatedStyle} />
+        
+        {/* Progress Bar - directly under header */}
+        <View style={styles.progressContainerFixed}>
+          <ProgressBar progress={progress} color={tintColor} style={styles.progressBar} />
         </View>
-      </SafeAreaView>
+        
+        {/* Next card preview (for TikTok-style transition) - Only show when not transitioning */}
+        {!isDiscussionStage && isFlipped && showRatingButtons && currentCard && (
+          <Animated.View style={[styles.nextCardPreview, nextCardAnimatedStyle]}>
+            <Text style={[styles.nextCardText, { color: textColor }]}>
+              {isLastCard ? "Study Complete!" : "Next Card"}
+            </Text>
+          </Animated.View>
+        )}
+      
+      <GestureDetector gesture={swipeGesture}>
+        <Animated.View style={[styles.safeAreaContainer, cardAnimatedStyle]}>
+          <SafeAreaView style={styles.safeAreaContainer}>
+            <View style={styles.container}>
+              {/* Subtitle Display */}
+              <SubtitleDisplay
+                text={isDiscussionStage 
+                  ? currentCard?.discussion.text || '' 
+                  : (isFlipped ? currentCard?.finalCard.back || '' : currentCard?.finalCard.front || '')
+                }
+                timingData={timingData}
+                currentTime={audioPosition}
+                isPlaying={isAudioPlaying}
+                showFullText={!settings.enabled || !timingData}
+              />
+
+              {/* Audio Player */}
+              {settings.enabled && (() => {
+                let audioUri: string | undefined;
+                let audioLabel: string;
+                
+                if (isDiscussionStage) {
+                  audioUri = currentCard?.discussion.audioFile;
+                  audioLabel = 'Discussion Audio';
+                } else {
+                  audioUri = isFlipped ? currentCard?.finalCard.answerAudio : currentCard?.finalCard.questionAudio;
+                  audioLabel = isFlipped ? 'Answer Audio' : 'Question Audio';
+                }
+                
+                return audioUri ? (
+                  <View style={[styles.audioContainer, { display: 'none' }]}>
+                    <AudioPlayer
+                      audioUri={audioUri}
+                      autoPlay={true} // Always autoplay when TTS is enabled
+                      size={24}
+                      onPositionChange={setAudioPosition}
+                      onPlayStateChange={setIsAudioPlaying}
+                    />
+                    <Text variant="bodySmall" style={{ color: textColor, textAlign: 'center', marginTop: 8 }}>
+                      {audioLabel}
+                    </Text>
+                  </View>
+                ) : null;
+              })()}
+
+              {/* Discussion Stage - Next Button */}
+              {isDiscussionStage && (
+                <View style={styles.flipContainer}>
+                  <Button
+                    mode="contained"
+                    onPress={handleDiscussionNext}
+                    style={[styles.flipButton, { backgroundColor: tintColor }]}
+                    labelStyle={{ color: 'white' }}
+                  >
+                    Continue to Learning
+                  </Button>
+                </View>
+              )}
+
+              {/* Learning Stage - Flip Button */}
+              {!isDiscussionStage && !isFlipped && (
+                <View style={styles.flipContainer}>
+                  <Button
+                    mode="contained"
+                    onPress={handleFlip}
+                    style={[styles.flipButton, { backgroundColor: tintColor }]}
+                    labelStyle={{ color: 'white' }}
+                  >
+                    Reveal Answer
+                  </Button>
+                </View>
+              )}
+
+              {/* FSRS Rating Buttons - Only in Learning Stage */}
+              {!isDiscussionStage && isFlipped && showRatingButtons && (
+                <View style={styles.fsrsContainer}>
+                  <Text style={[styles.swipeHint, { color: textColor }]}>
+                    Swipe up for "Good" or tap a button
+                  </Text>
+                  <FSRSRatingButtons
+                    onRate={handleFSRSRating}
+                    reviewOptions={reviewOptions}
+                    showPreview={true}
+                  />
+                </View>
+              )}
+            </View>
+          </SafeAreaView>
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
+  } catch (error) {
+    console.error('❌ StudyScreen: Error rendering main interface', error);
+    return (
+      <FullScreenContainer>
+        <View style={styles.centerContent}>
+          <Text variant="bodyLarge" style={{ color: textColor, textAlign: 'center' }}>
+            Error loading study interface
+          </Text>
+          <Button mode="outlined" onPress={() => router.back()} style={{ marginTop: 20 }}>
+            Go Back
+          </Button>
+        </View>
+      </FullScreenContainer>
+    );
+  }
 }
 
 const styles = StyleSheet.create({
@@ -463,7 +608,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  backgroundVideo: {
+  backgroundVideoContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -472,6 +617,15 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     zIndex: -1,
+  },
+  backgroundVideo: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
     opacity: 0.3,
   },
   centerContent: {
@@ -527,5 +681,28 @@ const styles = StyleSheet.create({
   flipButton: {
     paddingHorizontal: 24,
     paddingVertical: 8,
+  },
+  nextCardPreview: {
+    position: 'absolute',
+    top: '40%',
+    left: 0,
+    right: 0,
+    zIndex: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  nextCardText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    opacity: 0.7,
+  },
+  swipeHint: {
+    textAlign: 'center',
+    fontSize: 14,
+    marginBottom: 12,
+    opacity: 0.7,
+    fontStyle: 'italic',
   },
 });
