@@ -154,6 +154,23 @@ export function useCards(deckId: string) {
     }
   };
 
+  const updateCardStage = async (cardId: string, stage: Stage) => {
+    try {
+      const updatedCards = cards.map(card =>
+        card.id === cardId
+          ? { ...card, stage }
+          : card
+      );
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
+      setCards(updatedCards);
+      return true;
+    } catch (error) {
+      console.error('Error updating card stage:', error);
+      Alert.alert('Error', 'Failed to update card stage');
+      return false;
+    }
+  };
+
   const getCardById = (cardId: string): FlashCard | undefined => {
     return cards.find(card => card.id === cardId);
   };
@@ -171,6 +188,7 @@ export function useCards(deckId: string) {
     saveCard,
     deleteCard,
     updateCard,
+    updateCardStage,
     getCardById,
     refreshCards: loadCards,
   };

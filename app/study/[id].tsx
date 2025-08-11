@@ -15,7 +15,7 @@ import { useDecks } from '@/hooks/useDecks';
 import { Rating, useFSRSStudy } from '@/hooks/useFSRSStudy';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { useTTS } from '@/hooks/useTTS';
-import { FlashCard } from '@/services/fsrsService';
+import { FlashCard, Stage } from '@/services/fsrsService';
 import { ttsService } from '@/services/ttsService';
 
 interface Deck {
@@ -94,7 +94,7 @@ export default function StudyScreen() {
 
   
   const { decks, loading: decksLoading } = useDecks();
-  const { cards, loading: cardsLoading } = useCards(id || '');
+  const { cards, loading: cardsLoading, updateCardStage } = useCards(id || '');
   
   // FSRS Integration
   const {
@@ -125,6 +125,7 @@ export default function StudyScreen() {
   const [showRatingButtons, setShowRatingButtons] = useState(false);
   const [reviewOptions, setReviewOptions] = useState<any>(null);
   const [reviewStartTime, setReviewStartTime] = useState<Date | null>(null);
+  const [isDiscussionStage, setIsDiscussionStage] = useState(false);
 
   const loading = decksLoading || cardsLoading || fsrsLoading;
 
@@ -172,11 +173,24 @@ export default function StudyScreen() {
       const currentCard = fsrsCurrentCard;
       if (!currentCard) return;
 
+      // Check if we're in discussion stage
+      const inDiscussionStage = currentCard.stage === Stage.Discussion;
+      setIsDiscussionStage(inDiscussionStage);
+
       setTimingData(null);
       
       try {
         // Get timing data for the current audio using local files
-        const currentAudio = isFlipped ? currentCard.finalCard.answerAudio : currentCard.finalCard.questionAudio;
+        let currentAudio: string | undefined;
+        
+        if (inDiscussionStage) {
+          // In discussion stage, use discussion audio if available
+          currentAudio = currentCard.discussion.audioFile;
+        } else {
+          // In learning stage, use front/back audio as usual
+          currentAudio = isFlipped ? currentCard.finalCard.answerAudio : currentCard.finalCard.questionAudio;
+        }
+        
         if (currentAudio) {
           const timing = await ttsService.getLocalTimingData(currentAudio);
           if (timing) {
@@ -206,6 +220,27 @@ export default function StudyScreen() {
       setShowRatingButtons(true);
       setReviewStartTime(new Date());
       loadReviewOptions();
+    }
+  };
+
+  const handleDiscussionNext = async () => {
+    if (!currentCard) return;
+
+    try {
+      // Update the card's stage to Learning in storage
+      const success = await updateCardStage(currentCard.id, Stage.Learning);
+      
+      if (success) {
+        // Update local state to reflect the change
+        setIsDiscussionStage(false);
+        setAudioPosition(0);
+        
+        console.log('Moved from Discussion to Learning stage for card:', currentCard.id);
+      } else {
+        console.error('Failed to update card stage');
+      }
+    } catch (error) {
+      console.error('Error transitioning from discussion to learning:', error);
     }
   };
 
@@ -241,6 +276,7 @@ export default function StudyScreen() {
           setShowRatingButtons(false);
           setReviewOptions(null);
           setAudioPosition(0);
+          setIsDiscussionStage(false); // Reset discussion stage for next card
           // Don't force audio playing state - let AudioPlayer handle it
           setReviewStartTime(null);
         } else {
@@ -262,6 +298,7 @@ export default function StudyScreen() {
     setStudyComplete(false);
     setCorrectCount(0);
     setAudioPosition(0);
+    setIsDiscussionStage(false);
     // Don't force audio playing state - let AudioPlayer handle it
   };
 
@@ -330,53 +367,83 @@ export default function StudyScreen() {
         <View style={styles.container}>
           {/* Subtitle Display */}
           <SubtitleDisplay
-        text={isFlipped ? currentCard?.finalCard.back || '' : currentCard?.finalCard.front || ''}
-        timingData={timingData}
-        currentTime={audioPosition}
-        isPlaying={isAudioPlaying}
-        showFullText={!settings.enabled || !timingData}
-      />
-
-      {/* Audio Player */}
-      {settings.enabled && (isFlipped ? currentCard?.finalCard.answerAudio : currentCard?.finalCard.questionAudio) && (
-        <View style={[styles.audioContainer, { display: 'none' }]}>
-          <AudioPlayer
-            audioUri={isFlipped ? currentCard?.finalCard.answerAudio : currentCard?.finalCard.questionAudio}
-            autoPlay={true} // Always autoplay when TTS is enabled
-            size={24}
-            onPositionChange={setAudioPosition}
-            onPlayStateChange={setIsAudioPlaying}
+            text={isDiscussionStage 
+              ? currentCard?.discussion.ssmlText || '' 
+              : (isFlipped ? currentCard?.finalCard.back || '' : currentCard?.finalCard.front || '')
+            }
+            timingData={timingData}
+            currentTime={audioPosition}
+            isPlaying={isAudioPlaying}
+            showFullText={!settings.enabled || !timingData}
           />
-          <Text variant="bodySmall" style={{ color: textColor, textAlign: 'center', marginTop: 8 }}>
-            {isFlipped ? 'Answer Audio' : 'Question Audio'}
-          </Text>
-        </View>
-      )}
 
-      {/* Flip Button */}
-      {!isFlipped && (
-        <View style={styles.flipContainer}>
-          <Button
-            mode="contained"
-            onPress={handleFlip}
-            style={[styles.flipButton, { backgroundColor: tintColor }]}
-            labelStyle={{ color: 'white' }}
-          >
-            Reveal Answer
-          </Button>
-        </View>
-      )}
+          {/* Audio Player */}
+          {settings.enabled && (() => {
+            let audioUri: string | undefined;
+            let audioLabel: string;
+            
+            if (isDiscussionStage) {
+              audioUri = currentCard?.discussion.audioFile;
+              audioLabel = 'Discussion Audio';
+            } else {
+              audioUri = isFlipped ? currentCard?.finalCard.answerAudio : currentCard?.finalCard.questionAudio;
+              audioLabel = isFlipped ? 'Answer Audio' : 'Question Audio';
+            }
+            
+            return audioUri ? (
+              <View style={[styles.audioContainer, { display: 'none' }]}>
+                <AudioPlayer
+                  audioUri={audioUri}
+                  autoPlay={true} // Always autoplay when TTS is enabled
+                  size={24}
+                  onPositionChange={setAudioPosition}
+                  onPlayStateChange={setIsAudioPlaying}
+                />
+                <Text variant="bodySmall" style={{ color: textColor, textAlign: 'center', marginTop: 8 }}>
+                  {audioLabel}
+                </Text>
+              </View>
+            ) : null;
+          })()}
 
-      {/* FSRS Rating Buttons */}
-      {isFlipped && showRatingButtons && (
-        <View style={styles.fsrsContainer}>
-          <FSRSRatingButtons
-            onRate={handleFSRSRating}
-            reviewOptions={reviewOptions}
-            showPreview={true}
-          />
-        </View>
-      )}
+          {/* Discussion Stage - Next Button */}
+          {isDiscussionStage && (
+            <View style={styles.flipContainer}>
+              <Button
+                mode="contained"
+                onPress={handleDiscussionNext}
+                style={[styles.flipButton, { backgroundColor: tintColor }]}
+                labelStyle={{ color: 'white' }}
+              >
+                Continue to Learning
+              </Button>
+            </View>
+          )}
+
+          {/* Learning Stage - Flip Button */}
+          {!isDiscussionStage && !isFlipped && (
+            <View style={styles.flipContainer}>
+              <Button
+                mode="contained"
+                onPress={handleFlip}
+                style={[styles.flipButton, { backgroundColor: tintColor }]}
+                labelStyle={{ color: 'white' }}
+              >
+                Reveal Answer
+              </Button>
+            </View>
+          )}
+
+          {/* FSRS Rating Buttons - Only in Learning Stage */}
+          {!isDiscussionStage && isFlipped && showRatingButtons && (
+            <View style={styles.fsrsContainer}>
+              <FSRSRatingButtons
+                onRate={handleFSRSRating}
+                reviewOptions={reviewOptions}
+                showPreview={true}
+              />
+            </View>
+          )}
         </View>
       </SafeAreaView>
     </View>
