@@ -7,9 +7,9 @@ import Animated from 'react-native-reanimated';
 
 import AudioPlayer from '@/components/AudioPlayer';
 import DeleteConfirmationModal from '@/components/modals/DeleteConfirmationModal';
-import { FlashCard } from '@/hooks/useCards';
 import { useSwipeGesture } from '@/hooks/useSwipeGesture';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { FlashCard } from '@/services/fsrsService';
 
 interface FlashCardItemProps {
   card: FlashCard;
@@ -98,20 +98,17 @@ export default function FlashCardItem({
                       {isFlipped ? 'Back' : 'Front'}
                     </Text>
                     {/* Show audio player if TTS is available for current side */}
-                    {((isFlipped && card.answerAudio) || (!isFlipped && card.questionAudio)) && (
+                    {((isFlipped && card.finalCard.answerAudio) || (!isFlipped && card.finalCard.questionAudio)) && (
                       <View style={styles.audioPlayerContainer}>
                         <AudioPlayer 
-                          audioUri={isFlipped ? card.answerAudio : card.questionAudio}
+                          audioUri={isFlipped ? card.finalCard.answerAudio : card.finalCard.questionAudio}
                           size={20}
                         />
                       </View>
                     )}
                   </View>
                   <Text variant="bodyLarge" style={{ color: textColor, textAlign: 'center', lineHeight: 24 }}>
-                    {isFlipped ? card.back : card.front}
-                  </Text>
-                  <Text variant="bodySmall" style={{ color: textColor, opacity: 0.4, marginTop: 12 }}>
-                    Tap to flip • Swipe left to delete • Swipe right to edit
+                    {isFlipped ? card.finalCard.back : card.finalCard.front}
                   </Text>
                 </TouchableOpacity>
               </Card.Content>
@@ -124,7 +121,7 @@ export default function FlashCardItem({
         visible={showDeleteModal}
         onDismiss={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
-        deckName={card.front}
+        deckName={card.finalCard.front}
       />
     </>
   );

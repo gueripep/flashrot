@@ -10,10 +10,11 @@ import FlashCardItem from '@/components/FlashCardItem';
 import StudyStatsCard from '@/components/StudyStatsCard';
 import AddCardModal from '@/components/modals/AddCardModal';
 import DeleteConfirmationModal from '@/components/modals/DeleteConfirmationModal';
-import { FlashCard, useCards } from '@/hooks/useCards';
+import { useCards } from '@/hooks/useCards';
 import { useDecks } from '@/hooks/useDecks';
 import { useFSRSStudy } from '@/hooks/useFSRSStudy';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { FlashCard } from '@/services/fsrsService';
 
 interface Deck {
   id: string;
@@ -320,7 +321,7 @@ export default function DeckScreen() {
         visible={showAddCardModal}
         onDismiss={() => setShowAddCardModal(false)}
         onSaveCard={handleSaveCard}
-        initialCard={editingCard ? { front: editingCard.front, back: editingCard.back } : null}
+        initialCard={editingCard ? { front: editingCard.finalCard.front, back: editingCard.finalCard.back } : null}
         mode={editingCard ? 'edit' : 'add'}
       />
 
@@ -328,7 +329,7 @@ export default function DeckScreen() {
         visible={showDeleteModal}
         onDismiss={() => setShowDeleteModal(false)}
         onConfirm={handleConfirmDelete}
-        deckName={selectedCard?.front || 'this card'}
+        deckName={selectedCard?.finalCard.front || 'this card'}
       />
     </>
   );

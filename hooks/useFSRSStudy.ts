@@ -1,11 +1,10 @@
 import {
-  EnhancedFlashCard,
+  FlashCard,
   fsrsService,
   Rating
 } from '@/services/fsrsService';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
-import { FlashCard } from './useCards';
 
 export interface StudyStats {
   totalCards: number;
@@ -22,8 +21,8 @@ export interface StudyModeOptions {
 }
 
 export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
-  const [enhancedCards, setEnhancedCards] = useState<EnhancedFlashCard[]>([]);
-  const [studyCards, setStudyCards] = useState<EnhancedFlashCard[]>([]);
+  const [enhancedCards, setEnhancedCards] = useState<FlashCard[]>([]);
+  const [studyCards, setStudyCards] = useState<FlashCard[]>([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isStudyActive, setIsStudyActive] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -103,7 +102,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       console.log('Enhanced cards available:', enhancedCards.length);
       console.log('All cards available:', allCards.length);
       
-      let cardsToStudy: EnhancedFlashCard[] = [];
+      let cardsToStudy: FlashCard[] = [];
       
       switch (options.mode) {
         case 'review':
@@ -257,7 +256,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
   /**
    * Get formatted time until next review for a card
    */
-  const getTimeUntilDue = (card: EnhancedFlashCard): string => {
+  const getTimeUntilDue = (card: FlashCard): string => {
     return fsrsService.formatTimeUntilDue(card.fsrs.due);
   };
 
@@ -345,7 +344,6 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       makeAllCardsDue: () => fsrsService.debugMakeAllCardsDue(),
       setDailyProgress: (studied: number, date?: string) => fsrsService.debugSetDailyProgress(studied, date),
       getAllData: () => fsrsService.debugGetAllData(),
-      createTestCards: (count: number, state?: any) => fsrsService.debugCreateTestCards(count, state),
       exportData: () => fsrsService.debugExportData(),
       importData: (jsonData: string) => fsrsService.debugImportData(jsonData)
     } : undefined,
@@ -363,6 +361,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       console.log('Refreshing FSRS data...');
       if (deckId && allCards.length > 0) {
         loadEnhancedCards();
+        loadStudyStats();
       }
     }
   };

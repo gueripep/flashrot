@@ -3,18 +3,19 @@ import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useEffect, useLayoutEffect, useState } from 'react';
-import { Dimensions, Platform, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { Button, IconButton, ProgressBar, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AudioPlayer from '@/components/AudioPlayer';
 import FSRSRatingButtons from '@/components/FSRSRatingButtons';
 import SubtitleDisplay from '@/components/SubtitleDisplay';
-import { FlashCard, useCards } from '@/hooks/useCards';
+import { useCards } from '@/hooks/useCards';
 import { useDecks } from '@/hooks/useDecks';
 import { Rating, useFSRSStudy } from '@/hooks/useFSRSStudy';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { useTTS } from '@/hooks/useTTS';
+import { FlashCard } from '@/services/fsrsService';
 import { ttsService } from '@/services/ttsService';
 
 interface Deck {
@@ -24,8 +25,6 @@ interface Deck {
   createdAt: string;
   cards?: FlashCard[];
 }
-
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Background Video Component
 const BackgroundVideo = () => {
@@ -177,7 +176,7 @@ export default function StudyScreen() {
       
       try {
         // Get timing data for the current audio using local files
-        const currentAudio = isFlipped ? currentCard.answerAudio : currentCard.questionAudio;
+        const currentAudio = isFlipped ? currentCard.finalCard.answerAudio : currentCard.finalCard.questionAudio;
         if (currentAudio) {
           const timing = await ttsService.getLocalTimingData(currentAudio);
           if (timing) {
@@ -303,26 +302,13 @@ export default function StudyScreen() {
     
     return (
       <FullScreenContainer>
-        <View style={styles.completionContainer}>
+        <View style={[styles.completionContainer, { backgroundColor: backgroundColor }]}>
           <AntDesign name="checkcircle" size={64} color={tintColor} />
           <Text variant="headlineMedium" style={{ color: textColor, marginTop: 16, textAlign: 'center' }}>
             Study Complete!
           </Text>
-          <Text variant="bodyLarge" style={{ color: textColor, marginTop: 8, textAlign: 'center' }}>
-            You got {correctCount} out of {totalStudied} cards correct
-          </Text>
-          <Text variant="titleLarge" style={{ color: tintColor, marginTop: 16, textAlign: 'center' }}>
-            {accuracy}% Accuracy
-          </Text>
-          
-          <Text variant="bodyMedium" style={{ color: textColor, marginTop: 8, textAlign: 'center', opacity: 0.8 }}>
-            {cardsRemaining > 0 && `${cardsRemaining} cards scheduled for later review`}
-          </Text>
           
           <View style={styles.completionButtons}>
-            <Button mode="outlined" onPress={handleRestart} style={styles.button}>
-              Study Again
-            </Button>
             <Button mode="contained" onPress={handleFinish} style={styles.button}>
               Finish
             </Button>
@@ -344,7 +330,7 @@ export default function StudyScreen() {
         <View style={styles.container}>
           {/* Subtitle Display */}
           <SubtitleDisplay
-        text={isFlipped ? currentCard?.back || '' : currentCard?.front || ''}
+        text={isFlipped ? currentCard?.finalCard.back || '' : currentCard?.finalCard.front || ''}
         timingData={timingData}
         currentTime={audioPosition}
         isPlaying={isAudioPlaying}
@@ -352,10 +338,10 @@ export default function StudyScreen() {
       />
 
       {/* Audio Player */}
-      {settings.enabled && (isFlipped ? currentCard?.answerAudio : currentCard?.questionAudio) && (
+      {settings.enabled && (isFlipped ? currentCard?.finalCard.answerAudio : currentCard?.finalCard.questionAudio) && (
         <View style={[styles.audioContainer, { display: 'none' }]}>
           <AudioPlayer
-            audioUri={isFlipped ? currentCard?.answerAudio : currentCard?.questionAudio}
+            audioUri={isFlipped ? currentCard?.finalCard.answerAudio : currentCard?.finalCard.questionAudio}
             autoPlay={true} // Always autoplay when TTS is enabled
             size={24}
             onPositionChange={setAudioPosition}
