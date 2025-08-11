@@ -336,14 +336,17 @@ export default function StudyScreen() {
   }
 
   return (
-    <FullScreenContainer>
-      {/* Progress Bar */}
-      <View style={styles.progressContainer}>
+    <View style={styles.fullScreenContainer}>
+      <BackgroundVideo />
+      {/* Progress Bar - directly under header */}
+      <View style={styles.progressContainerFixed}>
         <ProgressBar progress={progress} color={tintColor} style={styles.progressBar} />
       </View>
-
-      {/* Subtitle Display */}
-      <SubtitleDisplay
+      
+      <SafeAreaView style={styles.safeAreaContainer}>
+        <View style={styles.container}>
+          {/* Subtitle Display */}
+          <SubtitleDisplay
         text={isFlipped ? currentCard?.back || '' : currentCard?.front || ''}
         timingData={timingData}
         currentTime={audioPosition}
@@ -391,7 +394,9 @@ export default function StudyScreen() {
           />
         </View>
       )}
-    </FullScreenContainer>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -426,6 +431,14 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     marginBottom: 24,
+  },
+  progressContainerFixed: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1,
+    backgroundColor: 'transparent',
   },
   progressBar: {
     height: 8,
