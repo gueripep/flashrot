@@ -19,21 +19,21 @@ class AIService {
     }
   }
 
-  async reformulateAnswer(question: string, answer: string): Promise<string | null> {
+  async generateAnswer(question: string): Promise<string | null> {
     await this.initialize();
     if (!this.ai) return null;
 
     try {
       const prompt = [
-        'Rewrite the following answer to be clearer and more concise while preserving meaning and facts.',
-        '- Keep the same language as the input.',
-        '- Plain text only, no lists or markdown.',
-        '- Target 1-2 sentences (max ~60 words).',
+        'Generate a clear, accurate, and concise answer for the following question.',
+        '- Keep the same language as the question.',
+        '- Plain text only, no lists or markdown formatting.',
+        '- Target 1-3 sentences (max ~100 words).',
+        '- Be factual and educational.',
         '',
         `Question: ${question}`,
-        `Answer: ${answer}`,
         '',
-        'Rewritten answer:',
+        'Answer:',
       ].join('\n');
 
       const result: any = await this.ai.models.generateContent({
@@ -54,7 +54,7 @@ class AIService {
       if (!text) return null;
       return String(text).trim();
     } catch (error) {
-      console.error('AI reformulate failed:', error);
+      console.error('AI generate failed:', error);
       return null;
     }
   }

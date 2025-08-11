@@ -24,6 +24,10 @@ interface Deck {
 }
 
 export default function DeckScreen() {
+  // Constants
+  const FSRS_REFRESH_DELAY = 500;
+  const FOCUS_REFRESH_DELAY = 300;
+
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const navigation = useNavigation();
@@ -102,23 +106,32 @@ export default function DeckScreen() {
         // Small delay to avoid rapid calls
         const timer = setTimeout(() => {
           refreshFSRSData();
-        }, 300);
+        }, FOCUS_REFRESH_DELAY);
 
         return () => clearTimeout(timer);
       }
     }, [cards.length, fsrsLoading, refreshFSRSData])
   );
 
-  const handleCardFlip = (cardId: string) => {
+  // Helper functions for managing flipped cards
+  const updateFlippedCards = (cardId: string, action: 'toggle' | 'remove') => {
     setFlippedCards(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(cardId)) {
+      if (action === 'remove') {
         newSet.delete(cardId);
-      } else {
-        newSet.add(cardId);
+      } else if (action === 'toggle') {
+        if (newSet.has(cardId)) {
+          newSet.delete(cardId);
+        } else {
+          newSet.add(cardId);
+        }
       }
       return newSet;
     });
+  };
+
+  const handleCardFlip = (cardId: string) => {
+    updateFlippedCards(cardId, 'toggle');
   };
 
   const handleAddCard = () => {
@@ -131,17 +144,29 @@ export default function DeckScreen() {
     setShowAddCardModal(true);
   };
 
-  const handleDeleteCard = (card: FlashCard) => {
-    setSelectedCard(card);
-    setShowDeleteModal(true);
+  // Centralized card deletion logic
+  const deleteCardAndRefresh = async (cardId: string) => {
+    const success = await deleteCard(cardId);
+    if (success) {
+      updateFlippedCards(cardId, 'remove');
+      // Refresh FSRS data after successful deletion with a delay
+      setTimeout(() => {
+        refreshFSRSData();
+      }, FSRS_REFRESH_DELAY);
+    }
+    return success;
   };
 
-  const handleSaveCard = async (front: string, back: string) => {
+  const handleDeleteConfirm = async (card: FlashCard) => {
+    await deleteCardAndRefresh(card.id);
+  };
+
+  const handleSaveCard = async (front: string, back: string, generateAudio = true, useAI = false) => {
     let result;
     if (editingCard) {
       result = await updateCard(editingCard.id, front, back);
     } else {
-      result = await saveCard(front, back);
+      result = await saveCard(front, back, useAI);
     }
 
     // Refresh FSRS data after card operation (but only for new cards)
@@ -150,26 +175,15 @@ export default function DeckScreen() {
       // Small delay to ensure the card is saved before refreshing
       setTimeout(() => {
         refreshFSRSData();
-      }, 500);
+      }, FSRS_REFRESH_DELAY);
     }
-
+    setShowAddCardModal(false);
     return result;
   };
 
   const handleConfirmDelete = async () => {
     if (selectedCard) {
-      const success = await deleteCard(selectedCard.id);
-      if (success) {
-        setFlippedCards(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(selectedCard.id);
-          return newSet;
-        });
-        // Refresh FSRS data after successful deletion with a delay
-        setTimeout(() => {
-          refreshFSRSData();
-        }, 500);
-      }
+      const success = await deleteCardAndRefresh(selectedCard.id);
       setSelectedCard(null);
       return success;
     }
@@ -283,7 +297,7 @@ export default function DeckScreen() {
                 isFlipped={flippedCards.has(card.id)}
                 onFlip={handleCardFlip}
                 onEdit={handleEditCard}
-                onDelete={handleDeleteCard}
+                onDelete={handleDeleteConfirm}
               />
             ))
           ) : (

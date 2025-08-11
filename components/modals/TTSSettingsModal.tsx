@@ -3,14 +3,13 @@ import { useTTS } from '@/hooks/useTTS';
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import {
-    Button,
-    Divider,
-    List,
-    Modal,
-    Portal,
-    Switch,
-    Text,
-    TextInput
+  Button,
+  Divider,
+  List,
+  Modal,
+  Portal,
+  Text,
+  TextInput
 } from 'react-native-paper';
 
 interface TTSSettingsModalProps {
@@ -145,33 +144,6 @@ export default function TTSSettingsModal({ visible, onDismiss }: TTSSettingsModa
             </List.Section>
 
             <Divider />
-
-            {/* TTS Settings */}
-            <List.Section>
-              <List.Subheader style={{ color: textColor, paddingHorizontal: 16 }}>
-                Playback Settings
-              </List.Subheader>
-              
-              <List.Item
-                title="Enable TTS"
-                description="Generate and play audio for flashcards (audio will autoplay when enabled)"
-                titleStyle={{ color: textColor }}
-                descriptionStyle={{ color: textColor, opacity: 0.7 }}
-                left={props => <List.Icon {...props} icon="volume-high" color={textColor} />}
-                right={() => (
-                  <Switch
-                    value={settings.enabled}
-                    onValueChange={(value) => updateSettings({ enabled: value })}
-                    disabled={!settings.apiKeySet}
-                  />
-                )}
-                style={{ paddingVertical: 8 }}
-              />
-            </List.Section>
-
-            <Text variant="bodySmall" style={[styles.note, { color: textColor }]}>
-              Note: You need a Gemini API key to use TTS features. Get one from the Google AI Studio.
-            </Text>
           </ScrollView>
         </View>
 

@@ -118,13 +118,13 @@ export function useCards(deckId: string) {
     }
   };
 
-  const saveCard = async (front: string, back: string) => {
+  const saveCard = async (front: string, back: string, useAI = false) => {
     try {
       // Create the basic card first
-      const baseCard: FlashCard = {
+      let baseCard: FlashCard = {
         id: Date.now().toString(),
         front: front.trim(),
-        back: back.trim(),
+        back: useAI ? '' : back.trim(), // Empty back if AI will generate it
         createdAt: new Date().toISOString(),
         deckId
       };
@@ -138,18 +138,24 @@ export function useCards(deckId: string) {
         fsrs: fsrsData
       };
 
-      // Wait for AI reformulation of the answer (back) before generating TTS
-      try {
-        const reformulated = await aiService.reformulateAnswer(finalCard.front, finalCard.back);
-        if (reformulated && reformulated !== finalCard.back) {
-          finalCard = { ...finalCard, back: reformulated };
+      // Generate AI answer if requested
+      if (useAI) {
+        try {
+          const aiAnswer = await aiService.generateAnswer(finalCard.front);
+          if (aiAnswer) {
+            finalCard = { ...finalCard, back: aiAnswer };
+          } else {
+            throw new Error('AI failed to generate answer');
+          }
+        } catch (err) {
+          console.warn('AI generation error:', err);
+          Alert.alert('Error', 'Failed to generate AI answer. Please enter an answer manually.');
+          return false;
         }
-      } catch (err) {
-        console.warn('AI reformulation error:', err);
-        // Continue with original text if AI reformulation fails
       }
 
       // Generate TTS audio using the final (potentially reformulated) text
+
       try {
         const audioData = await ttsService.generateCardAudio(
           finalCard.id,
