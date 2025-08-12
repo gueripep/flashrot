@@ -1,5 +1,4 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { useTTS } from '@/hooks/useTTS';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Card, Text } from 'react-native-paper';
@@ -24,7 +23,6 @@ export default function StudyCard({
 }: StudyCardProps) {
   const textColor = useThemeColor({}, 'text');
   const cardBackgroundColor = useThemeColor({}, 'cardBackground');
-  const { settings } = useTTS();
 
   const currentAudio = isFlipped ? answerAudio : questionAudio;
 
@@ -39,7 +37,7 @@ export default function StudyCard({
             ]}>
               {isFlipped ? 'Answer' : 'Question'}
             </Text>
-            {settings.enabled && currentAudio && (
+            {currentAudio && (
               <AudioPlayer
                 audioUri={currentAudio}
                 autoPlay={true} // Always autoplay when TTS is enabled

@@ -5,7 +5,7 @@ import { FAB, IconButton, Text } from 'react-native-paper';
 
 import DeckCard from '@/components/DeckCard';
 import CreateDeckModal from '@/components/modals/CreateDeckModal';
-import TTSSettingsModal from '@/components/modals/TTSSettingsModal';
+import SettingsModal from '@/components/modals/SettingsModal';
 import { useDecks } from '@/hooks/useDecks';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { router } from 'expo-router';
@@ -99,7 +99,7 @@ export default function HomeScreen() {
         onCreateDeck={handleCreateDeck}
       />
 
-      <TTSSettingsModal
+      <SettingsModal
         visible={ttsModalVisible}
         onDismiss={() => setTtsModalVisible(false)}
       />

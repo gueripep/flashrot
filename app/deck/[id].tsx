@@ -163,7 +163,7 @@ export default function DeckScreen() {
     await deleteCardAndRefresh(card.id);
   };
 
-  const handleSaveCard = async (front: string, back: string, generateAudio = true, useAI = false) => {
+  const handleSaveCard = async (front: string, back: string, useAI = false) => {
     let result;
     if (editingCard) {
       result = await updateCard(editingCard.id, front, back);

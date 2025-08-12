@@ -1,5 +1,4 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { useTTS } from '@/hooks/useTTS';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
 import { Button, Portal, Switch, Text, TextInput } from 'react-native-paper';
@@ -7,7 +6,7 @@ import { Button, Portal, Switch, Text, TextInput } from 'react-native-paper';
 interface AddCardModalProps {
   visible: boolean;
   onDismiss: () => void;
-  onSaveCard: (front: string, back: string, generateAudio?: boolean, useAI?: boolean) => Promise<boolean>;
+  onSaveCard: (front: string, back: string, useAI?: boolean) => Promise<boolean>;
   initialCard?: { front: string; back: string } | null;
   mode?: 'add' | 'edit';
 }
@@ -23,12 +22,10 @@ export default function AddCardModal({
   const backgroundColor = useThemeColor({}, 'background');
   const primaryColor = useThemeColor({}, 'tint');
   const overlayColor = useThemeColor({ light: 'rgba(0,0,0,0.2)', dark: 'rgba(255,255,255,0.05)' }, 'text');
-  const { settings } = useTTS();
   const frontInputRef = useRef<any>(null);
 
   const [front, setFront] = useState('');
   const [back, setBack] = useState('');
-  const [generateAudio, setGenerateAudio] = useState(true);
   const [useAI, setUseAI] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -74,7 +71,7 @@ export default function AddCardModal({
     }
 
     setSaving(true);
-    await onSaveCard(front, back, settings.enabled && generateAudio, useAI);
+    await onSaveCard(front, back, useAI);
     setSaving(false);
   };
 

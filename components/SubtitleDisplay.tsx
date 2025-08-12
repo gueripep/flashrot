@@ -64,7 +64,6 @@ interface SubtitleDisplayProps {
     timingData?: TimingData | null;
     currentTime: number;
     isPlaying: boolean;
-    showFullText?: boolean;
 }
 
 export default function SubtitleDisplay({
@@ -72,7 +71,6 @@ export default function SubtitleDisplay({
     timingData,
     currentTime,
     isPlaying,
-    showFullText = false
 }: SubtitleDisplayProps) {
     const textColor = useThemeColor({}, 'text');
     const tintColor = useThemeColor({}, 'tint');
@@ -86,13 +84,12 @@ export default function SubtitleDisplay({
     useEffect(() => {
         // We are ready to display subtitles if we should show the full text,
         // or if we have valid timing data.
-        const ready = showFullText || (!!timingData && !!timingData.word_timings && timingData.word_timings.length > 0);
         
         // A small delay helps prevent a "flash" of content if data arrives quickly.
-        const timer = setTimeout(() => setIsReady(ready), 50);
+        const timer = setTimeout(() => setIsReady(true), 50);
         
         return () => clearTimeout(timer);
-    }, [timingData, showFullText]);
+    }, [timingData]);
 
     useEffect(() => {
         if (!timingData) {
