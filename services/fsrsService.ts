@@ -244,8 +244,6 @@ class FSRSService {
         // Calculate new scheduling
         const schedulingCards: IPreview = this.fsrsInstance.repeat(fsrsCard, reviewDate);
 
-        console.log('FSRS scheduling result:', schedulingCards);
-
         // Check if schedulingCards is valid
         if (!schedulingCards) {
             throw new Error('FSRS repeat method returned undefined');
@@ -258,8 +256,6 @@ class FSRSService {
             const availableRatings = Object.keys(schedulingCards);
             throw new Error(`Invalid rating: ${rating}. Available ratings: ${availableRatings.join(', ')}`);
         }
-
-        console.log('Selected card for rating', rating, ':', updatedCard);
 
         // Extract the new card data
         const newFSRSData: Card = {
