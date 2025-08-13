@@ -1,31 +1,41 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { AudioSource, useAudioPlayer } from 'expo-audio';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { IconButton } from 'react-native-paper';
 
 interface AudioPlayerProps {
-  audioUri: string | null | undefined;
+  audioUri: string | number | null | undefined;
   autoPlay?: boolean;
   size?: number;
   disabled?: boolean;
   onPositionChange?: (position: number) => void;
   onPlayStateChange?: (isPlaying: boolean) => void;
+  onAudioFinished?: () => void;
 }
 
-export default function AudioPlayer({ 
-  audioUri, 
-  autoPlay = false, 
-  size = 24,
-  disabled = false,
-  onPositionChange,
-  onPlayStateChange
-}: AudioPlayerProps) {
+const AudioPlayer = forwardRef(function AudioPlayer(
+  { audioUri, autoPlay = false, size = 24, disabled = false, onPositionChange, onPlayStateChange, onAudioFinished }: AudioPlayerProps,
+  ref
+) {
+  useImperativeHandle(ref, () => ({
+    playAudio,
+    pauseAudio,
+    stopAudio
+  }));
   const [isLoading, setIsLoading] = useState(false);
+  const [hasTimerStarted, setHasTimerStarted] = useState(false);
   const tintColor = useThemeColor({}, 'tint');
   const isMountedRef = useRef(true);
-  
-  const player = useAudioPlayer(audioUri ? { uri: audioUri } as AudioSource : null);
+  console.log("uri", audioUri)
+  // Accept both string (URL/path) and number (require asset ID)
+  const player = useAudioPlayer(
+    audioUri
+      ? typeof audioUri === 'string'
+        ? { uri: audioUri } as AudioSource
+        : audioUri // number (require asset ID)
+      : null
+  );
 
   // Cleanup effect to mark component as unmounted
   useEffect(() => {
@@ -41,6 +51,8 @@ export default function AudioPlayer({
         playAudio();
       }, 100);
     }
+    // Reset duration tracking when audio changes
+    setHasTimerStarted(false);
   }, [audioUri, autoPlay, disabled, player]);
 
   // Track audio position and playing state
@@ -56,17 +68,26 @@ export default function AudioPlayer({
 
       try {
         // More defensive checks before accessing player properties
-        if (player && 
-            typeof player === 'object' && 
-            'playing' in player && 
-            'currentTime' in player) {
-          
+        if (player &&
+          typeof player === 'object' &&
+          'playing' in player &&
+          'currentTime' in player &&
+          'duration' in player) {
+
           // Test if player is still accessible before reading properties
           try {
             const isPlaying = player.playing;
+            const currentTime = player.currentTime || 0;
+            const duration = player.duration || 0;
+
             if (isPlaying) {
-              const currentTime = player.currentTime || 0;
               onPositionChange?.(currentTime);
+            }
+            // Check if audio has finished playing
+            if (duration > 0 && currentTime >= duration - 0.1 && !hasTimerStarted) {
+              // Audio has finished
+              setHasTimerStarted(true);
+              onAudioFinished?.();
             }
           } catch (innerError) {
             // Player might be released, clear interval and exit
@@ -82,10 +103,11 @@ export default function AudioPlayer({
     }, 100); // Update every 100ms
 
     return () => clearInterval(interval);
-  }, [player, onPositionChange]);
+  }, [player, onAudioFinished]);
 
   useEffect(() => {
     try {
+      console.log("test");
       if (player && typeof player === 'object' && 'playing' in player) {
         // Test if player is still accessible before reading playing state
         try {
@@ -105,19 +127,21 @@ export default function AudioPlayer({
   }, [player?.playing, onPlayStateChange]);
 
   const playAudio = async () => {
-    if (!player || disabled || !isMountedRef.current) return;
+    const isInvalid = !player || disabled || !isMountedRef.current
+    console.log('🎵 AudioPlayer: playAudio called', { isInvalid });
+    if (isInvalid) return;
 
     try {
       setIsLoading(true);
       // Reset position when starting to play
       onPositionChange?.(0);
-      
+
       // Additional validation to check if player is still valid
-      if (player && 
-          typeof player === 'object' && 
-          'play' in player && 
-          typeof player.play === 'function') {
-        
+      if (player &&
+        typeof player === 'object' &&
+        'play' in player &&
+        typeof player.play === 'function') {
+
         // Check if the player is not already released by testing a property access
         try {
           // Test if we can access player properties without throwing
@@ -141,13 +165,13 @@ export default function AudioPlayer({
 
   const pauseAudio = () => {
     if (!isMountedRef.current) return;
-    
+
     try {
-      if (player && 
-          typeof player === 'object' && 
-          'pause' in player && 
-          typeof player.pause === 'function') {
-        
+      if (player &&
+        typeof player === 'object' &&
+        'pause' in player &&
+        typeof player.pause === 'function') {
+
         // Test if player is still valid before pausing
         try {
           const testAccess = player.currentTime;
@@ -163,9 +187,21 @@ export default function AudioPlayer({
     }
   };
 
+  const stopAudio = () => {
+    try {
+      const testAccess = player.currentTime;
+      player.pause();
+      player.seekTo(0);
+    } catch (innerError) {
+      console.warn('🎵 AudioPlayer: Player appears to be released, skipping stop');
+      onPlayStateChange?.(false);
+    }
+  }
+
+
   const handlePress = () => {
     if (!isMountedRef.current) return;
-    
+
     try {
       // Safely check if player is playing
       let isCurrentlyPlaying = false;
@@ -180,7 +216,7 @@ export default function AudioPlayer({
           return;
         }
       }
-      
+
       if (isCurrentlyPlaying) {
         pauseAudio();
       } else {
@@ -226,8 +262,7 @@ export default function AudioPlayer({
       />
     </View>
   );
-}
-
+});
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
@@ -237,3 +272,5 @@ const styles = StyleSheet.create({
     margin: 0,
   },
 });
+
+export default AudioPlayer;

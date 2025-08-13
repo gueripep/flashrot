@@ -1,6 +1,5 @@
 import { useFSRSStudy } from '@/hooks/useFSRSStudy';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { State } from '@/services/fsrsService';
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Card, Chip, Text, TextInput } from 'react-native-paper';
@@ -72,18 +71,6 @@ export default function DebugPanel({ deckId, allCards, onRefresh }: DebugPanelPr
       Alert.alert('Success', 'All cards are now due for review!');
     } catch (error) {
       Alert.alert('Error', 'Failed to make cards due');
-    }
-  };
-
-  const handleCreateTestCards = async () => {
-    try {
-      const count = parseInt(testCardCount);
-      const cardIds = await debug.createTestCards(count, State.New);
-      refreshData();
-      onRefresh?.();
-      Alert.alert('Success', `Created ${count} test cards!`);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to create test cards');
     }
   };
 
@@ -179,28 +166,6 @@ export default function DebugPanel({ deckId, allCards, onRefresh }: DebugPanelPr
               </Button>
             </View>
           </View>
-
-          {/* Test Data */}
-          <View style={styles.section}>
-            <Text variant="bodyMedium" style={[styles.sectionTitle, { color: textColor }]}>
-              Test Data
-            </Text>
-            <View style={styles.row}>
-              <TextInput
-                mode="outlined"
-                label="Count"
-                value={testCardCount}
-                onChangeText={setTestCardCount}
-                keyboardType="numeric"
-                style={styles.input}
-                dense
-              />
-              <Button mode="contained" onPress={handleCreateTestCards} style={styles.button}>
-                Create Test Cards
-              </Button>
-            </View>
-          </View>
-
           {/* Daily Progress */}
           <View style={styles.section}>
             <Text variant="bodyMedium" style={[styles.sectionTitle, { color: textColor }]}>

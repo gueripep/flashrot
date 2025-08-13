@@ -679,7 +679,8 @@ class FSRSService {
                 // Reset FSRS data for each card
                 const resetCards = cards.map(card => ({
                     ...card,
-                    fsrs: this.createNewFSRSCard(card.id, card.deckId)
+                    fsrs: this.createNewFSRSCard(card.id, card.deckId),
+                    stage: Stage.Discussion
                 }));
 
                 await this.saveCardsToDeck(deckId, resetCards);

@@ -2,8 +2,8 @@ import { AntDesign } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import React, { useEffect, useLayoutEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { Button, IconButton, ProgressBar, Text } from 'react-native-paper';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -52,7 +52,6 @@ const BackgroundVideo = ({
 
     // Notify when the video is ready
     player.addListener('sourceChange', () => {
-      console.log('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
       if (onVideoLoaded) {
         console.log('Video loaded callback triggered');
 
@@ -92,6 +91,8 @@ const FullScreenContainer = ({ children }: { children: React.ReactNode }) => (
 export default function StudyScreen() {
   const { id, mode } = useLocalSearchParams<{ id: string; mode?: string }>();
   const router = useRouter();
+  const tickerAudioPlayerRef = useRef<{ playAudio: () => void, stopAudio: () => void } | null>(null);
+
   const navigation = useNavigation();
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
@@ -122,6 +123,19 @@ export default function StudyScreen() {
     loading: fsrsLoading
   } = useFSRSStudy(id || '', cards);
 
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: false,
+    });
+  }, [navigation]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      clearRevealTimer();
+    };
+  }, []);
+
   // Function to get video source based on card index
   const getVideoSource = (cardIndex: number) => {
     const videos = [
@@ -139,52 +153,117 @@ export default function StudyScreen() {
   const [currentDeck, setCurrentDeck] = useState<Deck | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
   const [studyComplete, setStudyComplete] = useState(false);
-  const [correctCount, setCorrectCount] = useState(0);
   const [audioPosition, setAudioPosition] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [timingData, setTimingData] = useState<any>(null);
   const [showRatingButtons, setShowRatingButtons] = useState(false);
-  const [reviewOptions, setReviewOptions] = useState<any>(null);
   const [reviewStartTime, setReviewStartTime] = useState<Date | null>(null);
   const [isDiscussionStage, setIsDiscussionStage] = useState(false);
   const [isProcessingRating, setIsProcessingRating] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [nextVideoSource, setNextVideoSource] = useState<any>(null);
-
+  const [isLiked, setIsLiked] = useState(false);
+  const [isTimerActive, setIsTimerActive] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(3);
+  const [countdownInterval, setCountdownInterval] = useState<number | null>(null);
 
   const loading = decksLoading || cardsLoading || fsrsLoading;
 
-  // TikTok-style swipe gesture for "Good" rating
+  // TikTok-style swipe gesture for rating based on like state
   const handleSwipeUp = () => {
-    console.log('👆 StudyScreen: handleSwipeUp called', { isFlipped, showRatingButtons, isDiscussionStage, isProcessingRating });
+    console.log('👆 StudyScreen: handleSwipeUp called', { isFlipped, showRatingButtons, isDiscussionStage, isProcessingRating, isLiked });
     try {
       if (isProcessingRating) {
         console.log('⚠️ StudyScreen: handleSwipeUp blocked - already processing rating');
         return;
       }
 
-      if (!isFlipped || !showRatingButtons || isDiscussionStage) {
-        console.log('⚠️ StudyScreen: handleSwipeUp blocked - invalid state');
-        return;
-      }
-
-      if (!currentCard || !reviewStartTime) {
+      if (!currentCard) {
         console.log('⚠️ StudyScreen: handleSwipeUp blocked - missing data', {
           hasCurrentCard: !!currentCard,
-          hasReviewStartTime: !!reviewStartTime
         });
         return;
       }
 
       setIsProcessingRating(true);
 
-      // Trigger "Good" rating (Rating.Good = 2)
-      console.log('👍 StudyScreen: Triggering Good rating via swipe');
-      handleFSRSRating(Rating.Good);
+      // Use the rating based on like state
+      if (isDiscussionStage) {
+        // If in discussion stage, just move to next card
+        handleDiscussionNext();
+      }
+      else if (!isFlipped) {
+        console.log("easy, skipped...");
+        handleFSRSRating(Rating.Easy);
+      }
+      else {
+        const rating = getRatingFromLikeState(isLiked);
+        handleFSRSRating(rating);
+      }
+
+      console.log(`👍 StudyScreen: Triggering ${isLiked ? 'Hard' : 'Good'} rating via swipe`);
     } catch (error) {
       console.error('❌ StudyScreen: Error in handleSwipeUp', error);
       setIsProcessingRating(false);
     }
+  };
+
+  // Helper function to get rating based on like state
+  const getRatingFromLikeState = (liked: boolean): Rating => {
+    return liked ? Rating.Hard : Rating.Good;
+  };
+
+  // Start timer countdown after question audio finishes
+  const startRevealTimer = () => {
+    console.log("timer started");
+    if (isTimerActive || isFlipped) return;
+
+    setIsTimerActive(true);
+    setTimerSeconds(3);
+
+    console.log('🎵 AudioPlayer: Starting reveal timer');
+    console.log(tickerAudioPlayerRef.current)
+    tickerAudioPlayerRef.current?.playAudio();
+
+    const interval = setInterval(() => {
+      setTimerSeconds(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setIsTimerActive(false);
+          setCountdownInterval(null);
+          handleFlip();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    setCountdownInterval(interval);
+  };
+
+  // Clear timer if needed
+  const clearRevealTimer = () => {
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+      setCountdownInterval(null);
+    }
+    setIsTimerActive(false);
+    setTimerSeconds(3);
+  };
+
+  // Handle when audio finishes playing
+  const handleAudioFinished = () => {
+    if (!isFlipped && !isDiscussionStage) {
+      // Start the reveal timer when question audio finishes
+      setTimeout(() => {
+        startRevealTimer();
+      }, 500); // Small delay before starting timer
+    }
+  };
+
+  // Handle like button toggle
+  const handleLikeToggle = () => {
+    setIsLiked(!isLiked);
   };
 
   // plays the animation after swipe gesture
@@ -194,8 +273,7 @@ export default function StudyScreen() {
     })
     .onChange((event) => {
       'worklet';
-      // Only respond to upward swipes when card is flipped and rating buttons are shown
-      if (!isFlipped || !showRatingButtons || isDiscussionStage) return;
+      // Only respond to upward swipes when card is flipped
 
       // Only allow upward swipes (negative Y)
       if (event.translationY >= 0) return;
@@ -209,8 +287,6 @@ export default function StudyScreen() {
       'worklet';
       console.log('🎭 StudyScreen: Swipe gesture ended');
       try {
-        if (!isFlipped || !showRatingButtons || isDiscussionStage) return;
-
         const swipeThreshold = -100;
         const screenHeight = containerHeight.value;
 
@@ -239,6 +315,10 @@ export default function StudyScreen() {
       const newNextVideoSource = getVideoSource((fsrsCardIndex || 0) + 1);
       setNextVideoSource(newNextVideoSource);
       setVideoLoaded(false); // Reset video loaded state
+
+      // Clear any active timer
+      clearRevealTimer();
+
       console.log('✅ StudyScreen: Animation values reset successfully');
     } catch (error) {
       console.error('❌ StudyScreen: Error resetting animation values', error);
@@ -340,6 +420,10 @@ export default function StudyScreen() {
   const progress = fsrsProgress;
 
   const handleFlip = () => {
+    // Clear any active timer
+    clearRevealTimer();
+    tickerAudioPlayerRef.current?.stopAudio();
+
     setIsFlipped(!isFlipped);
     setAudioPosition(0);
     // Don't force stop audio playing state - let AudioPlayer handle autoplay
@@ -347,7 +431,28 @@ export default function StudyScreen() {
     if (!isFlipped) {
       setShowRatingButtons(true);
       setReviewStartTime(new Date());
-      loadReviewOptions();
+    }
+  };
+
+  // Common function to handle moving to the next card or ending the study session
+  const handleNextCardOrComplete = () => {
+    if (isLastCard) {
+      setStudyComplete(true);
+    } else {
+      const hasNext = fsrsNextCard();
+      if (hasNext) {
+        console.log('🎭 StudyScreen: Moving to next card');
+        // Reset state for next card
+        setIsFlipped(false);
+        setAudioPosition(0);
+        setIsDiscussionStage(false); // Reset discussion stage for next card
+        setIsLiked(false); // Reset like state for next card
+        clearRevealTimer(); // Clear any active timer
+        // Don't force audio playing state - let AudioPlayer handle it
+        setReviewStartTime(null);
+      } else {
+        setStudyComplete(true);
+      }
     }
   };
 
@@ -357,13 +462,11 @@ export default function StudyScreen() {
     try {
       // Update the card's stage to Learning in storage
       const success = await updateCardStage(currentCard.id, Stage.Learning);
-
+      setIsProcessingRating(false); // Reset processing state
       if (success) {
         // Update local state to reflect the change
         setIsDiscussionStage(false);
-        setAudioPosition(0);
-
-        console.log('Moved from Discussion to Learning stage for card:', currentCard.id);
+        handleNextCardOrComplete();
       } else {
         console.error('Failed to update card stage');
       }
@@ -372,47 +475,16 @@ export default function StudyScreen() {
     }
   };
 
-  const loadReviewOptions = async () => {
-    if (currentCard) {
-      const options = await getReviewOptions(currentCard.id);
-      setReviewOptions(options);
-    }
-  };
-
   const handleFSRSRating = async (rating: Rating) => {
     if (!currentCard || !reviewStartTime) return;
-
+    let success: boolean;
     const timeTaken = (new Date().getTime() - reviewStartTime.getTime()) / 1000;
-    const wasCorrect = rating >= Rating.Good;
-
+    // Record the review with FSRS
+    success = await reviewCard(rating, timeTaken);
     setIsProcessingRating(false); // Reset processing state
 
-    // Record the review with FSRS
-    const success = await reviewCard(rating, timeTaken);
-
     if (success) {
-      if (wasCorrect) {
-        setCorrectCount(prev => prev + 1);
-      }
-
-      // Move to next card or end session
-      if (isLastCard) {
-        setStudyComplete(true);
-      } else {
-        const hasNext = fsrsNextCard();
-        if (hasNext) {
-          // Reset state for next card
-          setIsFlipped(false);
-          setShowRatingButtons(false);
-          setReviewOptions(null);
-          setAudioPosition(0);
-          setIsDiscussionStage(false); // Reset discussion stage for next card
-          // Don't force audio playing state - let AudioPlayer handle it
-          setReviewStartTime(null);
-        } else {
-          setStudyComplete(true);
-        }
-      }
+      handleNextCardOrComplete();
     }
   };
 
@@ -431,8 +503,8 @@ export default function StudyScreen() {
       </FullScreenContainer>
     );
   }
-
-  if (!currentDeck || !cards || cards.length === 0) {
+  const noCardsAvailable = !currentDeck || !cards || cards.length === 0;
+  if (noCardsAvailable) {
     return (
       <FullScreenContainer>
         <View style={styles.centerContent}>
@@ -448,9 +520,6 @@ export default function StudyScreen() {
   }
 
   if (studyComplete) {
-    const totalStudied = studyCards.length;
-    const accuracy = Math.round((correctCount / totalStudied) * 100);
-
     return (
       <FullScreenContainer>
         <View style={[styles.completionContainer, { backgroundColor: backgroundColor }]}>
@@ -478,6 +547,11 @@ export default function StudyScreen() {
           containerHeight.value = height;
         }}
       >
+        {/* Progress Bar - fixed position */}
+        <View style={styles.progressContainerFixed}>
+          <ProgressBar progress={progress} color={tintColor} style={styles.progressBar} />
+        </View>
+
         {/* Double-height animated container for TikTok-style scrolling */}
         <Animated.View style={[styles.doubleHeightContainer, containerAnimatedStyle]}>
           {/* Current card section (top half) */}
@@ -487,11 +561,12 @@ export default function StudyScreen() {
               zIndex={-1}
               onVideoLoaded={() => setVideoLoaded(true)}
             />
+            <AudioPlayer
+              audioUri={require('@/assets/audio/timer-tick.mp3')}
+              autoPlay={false}
+              ref={tickerAudioPlayerRef}>
+            </AudioPlayer>
 
-            {/* Progress Bar - fixed position */}
-            <View style={styles.progressContainerFixed}>
-              <ProgressBar progress={progress} color={tintColor} style={styles.progressBar} />
-            </View>
 
             <GestureDetector gesture={swipeGesture}>
               <View style={styles.safeAreaContainer}>
@@ -529,6 +604,7 @@ export default function StudyScreen() {
                             size={24}
                             onPositionChange={setAudioPosition}
                             onPlayStateChange={setIsAudioPlaying}
+                            onAudioFinished={handleAudioFinished}
                           />
                           <Text variant="bodySmall" style={{ color: textColor, textAlign: 'center', marginTop: 8 }}>
                             {audioLabel}
@@ -537,30 +613,31 @@ export default function StudyScreen() {
                       ) : null;
                     })()}
 
-                    {/* Discussion Stage - Next Button */}
-                    {isDiscussionStage && (
-                      <View style={styles.flipContainer}>
-                        <Button
-                          mode="contained"
-                          onPress={handleDiscussionNext}
-                          style={[styles.flipButton, { backgroundColor: tintColor }]}
-                          labelStyle={{ color: 'white' }}
-                        >
-                          Continue to Learning
-                        </Button>
-                      </View>
+                    {/* Timer Display */}
+                    {!isDiscussionStage && !isFlipped && isTimerActive && (
+                      <TouchableOpacity onPress={handleFlip} style={styles.timerContainer}>
+                        <Text variant="headlineLarge" style={[styles.timerText, { color: tintColor }]}>
+                          {timerSeconds}
+                        </Text>
+                        <Text variant="bodyMedium" style={{ color: textColor, textAlign: 'center', marginTop: 8 }}>
+                          Auto-revealing answer...
+                        </Text>
+                        <Text variant="bodySmall" style={{ color: textColor, textAlign: 'center', marginTop: 4, opacity: 0.7 }}>
+                          Tap to reveal now
+                        </Text>
+                      </TouchableOpacity>
                     )}
 
-                    {/* Learning Stage - Flip Button */}
-                    {!isDiscussionStage && !isFlipped && (
+                    {/* Manual reveal option when no timer is active */}
+                    {!isDiscussionStage && !isFlipped && !isTimerActive && (
                       <View style={styles.flipContainer}>
                         <Button
-                          mode="contained"
+                          mode="outlined"
                           onPress={handleFlip}
-                          style={[styles.flipButton, { backgroundColor: tintColor }]}
-                          labelStyle={{ color: 'white' }}
+                          style={[styles.flipButton, { borderColor: tintColor }]}
+                          labelStyle={{ color: tintColor }}
                         >
-                          Reveal Answer
+                          Tap to Reveal Answer
                         </Button>
                       </View>
                     )}
@@ -569,9 +646,9 @@ export default function StudyScreen() {
                 <View style={styles.likeButtonContainer}>
                   <IconButton
                     icon="heart"
-                    iconColor="red"
+                    iconColor={isLiked ? "red" : "white"}
                     size={48}
-                    onPress={() => handleFSRSRating(Rating.Hard)}
+                    onPress={handleLikeToggle}
                   />
                 </View>
               </View>
@@ -671,7 +748,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   progressBar: {
-    height: 8
+    position: 'absolute',
+    alignSelf: 'center',
+    marginTop: 48,
+    height: 8,
+    borderRadius: 4,
+    width: '90%',
   },
   fsrsContainer: {
     marginBottom: 16,
@@ -736,5 +818,22 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     opacity: 0.7,
     fontStyle: 'italic',
+  },
+  timerContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+    padding: 20,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  timerText: {
+    fontSize: 64,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10,
   },
 });

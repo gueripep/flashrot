@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         justifyContent: 'center',
-        marginBottom: 24,
+        marginBottom: 96,
     },
     subtitleContainer: {
         alignItems: 'center',

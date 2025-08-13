@@ -23,7 +23,7 @@ export default function HomeScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
   const [modalVisible, setModalVisible] = useState(false);
-  const [ttsModalVisible, setTtsModalVisible] = useState(false);
+  const [ttsModalVisible, setSettingsModalVisible] = useState(false);
   
   // Use the custom hook for deck management
   const { decks, loading, saveDeck, deleteDeck } = useDecks();
@@ -35,7 +35,7 @@ export default function HomeScreen() {
         <IconButton
           icon="cog"
           iconColor={textColor}
-          onPress={() => setTtsModalVisible(true)}
+          onPress={() => setSettingsModalVisible(true)}
         />
       ),
     });
@@ -101,7 +101,7 @@ export default function HomeScreen() {
 
       <SettingsModal
         visible={ttsModalVisible}
-        onDismiss={() => setTtsModalVisible(false)}
+        onDismiss={() => setSettingsModalVisible(false)}
       />
     </>
   );

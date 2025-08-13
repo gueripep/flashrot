@@ -168,7 +168,7 @@ export function useCards(deckId: string) {
     try {
       const updatedCards = cards.map(card =>
         card.id === cardId
-          ? { ...card, stage }
+          ? { ...card, stage, fsrs: { ...card.fsrs, due: new Date(Date.now() + 23 * 60 * 60 * 1000) } }
           : card
       );
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
