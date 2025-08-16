@@ -1,3 +1,4 @@
+import { AUTH_TOKEN_KEY } from '@/constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
@@ -47,13 +48,13 @@ class TTSService {
         
       };
 
-      console.log('🔊 Synthesizing TTS with request:', requestBody);
-
+      const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
       // Step 1: Synthesize the speech
       const synthesizeResponse = await fetch(`${this.baseUrl}/tts/synthesize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(requestBody),
       });
@@ -64,6 +65,7 @@ class TTSService {
       }
 
       const synthesizeResult: TTSResponse = await synthesizeResponse.json();
+      console.log('✅ TTS synthesis successful:', synthesizeResult);
 
       // Step 2: Download the audio file
       const downloadUrl = `${this.baseUrl}/tts/download/${synthesizeResult.filename}`;

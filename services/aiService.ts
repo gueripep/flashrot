@@ -1,4 +1,7 @@
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AUTH_TOKEN_KEY } from '../constants/config';
+
 interface GenerationOptions {
   model?: string;
   maxWords?: number;
@@ -9,18 +12,21 @@ class AIService {
   private baseUrl = 'http://192.168.1.3:8000';
   private readonly defaultModel = 'gemini-2.0-flash';
 
+
   private async generateContent(prompt: string, options: GenerationOptions = {}): Promise<string | null> {
     try {
+      const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+      console.log(`Using token: ${token}`);
       const response: any = await fetch(`${this.baseUrl}/gemini/generate/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ prompt }), // Change 'request' to 'prompt'
       });
       const jsonResponse = await response.json();
       const text = jsonResponse?.content ?? null;
-      console.log('AI generation response:', jsonResponse);
       // const text = this.extractTextFromResult(result);
       if (!text) return null;
       return String(text).trim();

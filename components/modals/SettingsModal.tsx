@@ -1,13 +1,13 @@
-import { useAuth } from '@/hooks/useAuth';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import React, { useState } from 'react';
+import React from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import {
-    Button,
-    Divider,
-    Modal,
-    Portal,
-    Text
+  Button,
+  Divider,
+  Modal,
+  Portal,
+  Text
 } from 'react-native-paper';
 
 interface SettingsModalProps {
@@ -18,11 +18,7 @@ interface SettingsModalProps {
 export default function SettingsModal({ visible, onDismiss }: SettingsModalProps) {
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
-  const { logout, user } = useAuth();
-  
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const { logout, user } = useAuthContext();
 
   const handleLogout = async () => {
     Alert.alert(

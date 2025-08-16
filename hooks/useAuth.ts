@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
+import { AUTH_TOKEN_KEY } from '../constants/config';
 
 interface User {
     id: string;
@@ -19,7 +20,6 @@ interface AuthActions {
     logout: () => Promise<void>;
 }
 
-const AUTH_TOKEN_KEY = 'auth_token';
 const USER_DATA_KEY = 'user_data';
 
 // API base URL

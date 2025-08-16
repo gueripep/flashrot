@@ -1,7 +1,6 @@
 import AuthScreen from '@/components/AuthScreen';
 import { Colors } from '@/constants/Colors';
-import { AuthProvider } from '@/contexts/AuthContext';
-import { useAuth } from '@/hooks/useAuth';
+import { AuthProvider, useAuthContext } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
@@ -31,7 +30,7 @@ export default function RootLayout() {
 
 function RootLayoutContent() {
   const colorScheme = useColorScheme();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuthContext();
 
   useEffect(() => {
     // Debug: log every render and auth state
