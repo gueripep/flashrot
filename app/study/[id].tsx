@@ -389,18 +389,18 @@ export default function StudyScreen() {
 
       try {
         // Get timing data for the current audio using local files
-        let currentAudio: string | undefined;
+        let timingUri: string;
 
         if (inDiscussionStage) {
           // In discussion stage, use discussion audio if available
-          currentAudio = currentCard.discussion.audioFile;
+          timingUri = currentCard.discussion.audio.timingFilename;
         } else {
           // In learning stage, use front/back audio as usual
-          currentAudio = isFlipped ? currentCard.finalCard.answerAudio : currentCard.finalCard.questionAudio;
+          timingUri = isFlipped ? currentCard.finalCard.answerAudio.timingFilename : currentCard.finalCard.questionAudio.timingFilename;
         }
 
-        if (currentAudio) {
-          const timing = await ttsService.getLocalTimingData(currentAudio);
+        if (timingUri) {
+          const timing = await ttsService.getLocalTimingData(timingUri);
           if (timing) {
             setTimingData(timing);
           } else {
@@ -589,10 +589,10 @@ export default function StudyScreen() {
                       let audioLabel: string;
 
                       if (isDiscussionStage) {
-                        audioUri = currentCard?.discussion.audioFile;
+                        audioUri = currentCard?.discussion.audio.filename;
                         audioLabel = 'Discussion Audio';
                       } else {
-                        audioUri = isFlipped ? currentCard?.finalCard.answerAudio : currentCard?.finalCard.questionAudio;
+                        audioUri = isFlipped ? currentCard?.finalCard.answerAudio.filename : currentCard?.finalCard.questionAudio.filename;
                         audioLabel = isFlipped ? 'Answer Audio' : 'Question Audio';
                       }
 

@@ -2,6 +2,7 @@ import { AUTH_TOKEN_KEY } from '@/constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
+import { AudioFileRef } from './fsrsService';
 
 interface TTSRequest {
   text: string;
@@ -13,14 +14,11 @@ interface TTSRequest {
 }
 
 interface TTSResponse {
-  status: string;
-  message: string;
-  filename: string;
-  text_length: number;
-  language: string;
-  voice: string;
-  word_timings: any[];
-  timing_filename: string | null;
+  audio_file_name: string;
+  created_at: string;
+  id: number;
+  processing_time_ms: number;
+  timing_file_name: string | null;
 }
 
 class TTSService {
@@ -33,70 +31,94 @@ class TTSService {
 
   constructor() { }
 
-  // Generate TTS using the new API
-  async generateTTS(text: string, options?: Partial<TTSRequest>): Promise<string> {
+  // Generate TTS using the new API (orchestrates three steps)
+  async generateTTS(text: string, options?: Partial<TTSRequest>): Promise<AudioFileRef> {
     if (!text || !text.trim()) throw new Error('Text cannot be empty');
 
+    const requestBody: TTSRequest = {
+      text: text.trim(),
+      is_ssml: options?.is_ssml ?? false,
+      language_code: options?.language_code || 'en-US',
+      voice_name: options?.voice_name || 'en-US-Wavenet-D',
+      audio_encoding: options?.audio_encoding || 'MP3',
+      enable_time_pointing: options?.enable_time_pointing ?? true,
+    };
+
     try {
-      const requestBody: TTSRequest = {
-        text: text.trim(),
-        is_ssml: options?.is_ssml ?? false,
-        language_code: options?.language_code || 'en-US',
-        voice_name: options?.voice_name || 'en-US-Wavenet-D',
-        audio_encoding: options?.audio_encoding || 'MP3',
-        enable_time_pointing: options?.enable_time_pointing ?? true,
-        
-      };
-
       const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
-      // Step 1: Synthesize the speech
-      const synthesizeResponse = await fetch(`${this.baseUrl}/tts/synthesize`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!synthesizeResponse.ok) {
-        console.error('❌ TTS synthesis failed. Status:', synthesizeResponse.status);
-        throw new Error('TTS synthesis failed');
+      if (!token) {
+        console.error('❌ No auth token found for TTS request');
+        throw new Error('Authentication token is required for TTS requests');
       }
 
-      const synthesizeResult: TTSResponse = await synthesizeResponse.json();
-      console.log('✅ TTS synthesis successful:', synthesizeResult);
+      // Step 1: synthesize on server
+      const synthesizeResult = await this.synthesizeSpeech(requestBody, token);
 
-      // Step 2: Download the audio file
-      const downloadUrl = `${this.baseUrl}/tts/download/${synthesizeResult.filename}`;
-      const localFileName = `tts_${Date.now()}.mp3`;
-      const filePath = `${FileSystem.documentDirectory}${localFileName}`;
+      // Step 2: download audio
+      const audioUri = await this.downloadAudioFile(synthesizeResult.audio_file_name);
 
-      const downloadResult = await FileSystem.downloadAsync(downloadUrl, filePath);
-
-      if (downloadResult.status >= 200 && downloadResult.status < 300) {
-
-        // Step 3: Download and save timing data if available
-        if (synthesizeResult.timing_filename) {
-          try {
-            const timingUrl = `${this.baseUrl}/tts/timing/${synthesizeResult.timing_filename}`;
-            const localTimingFileName = localFileName.replace('.mp3', '_timing.json');
-            const timingFilePath = `${FileSystem.documentDirectory}${localTimingFileName}`;
-            await FileSystem.downloadAsync(timingUrl, timingFilePath);
-
-          } catch (timingError) {
-            console.log('⚠️ Failed to download timing data:', timingError);
-          }
-        }
-
-        return downloadResult.uri;
-      }
-
-      console.error('❌ Audio download failed. Status:', downloadResult.status);
-      throw new Error('Audio download failed');
+      // Step 3: download timing data if provided (best-effort)
+      const timingFileUri = await this.downloadTimingIfPresent(synthesizeResult.timing_file_name);
+      const audioFileRef: AudioFileRef = {
+        filename: audioUri,
+        timingFilename: timingFileUri,
+      };
+      return audioFileRef;
     } catch (error) {
       console.error('❌ Error generating TTS:', error);
       throw error;
+    }
+  }
+
+  // Step 1: call synthesize endpoint and return parsed response
+  private async synthesizeSpeech(requestBody: TTSRequest, token: string): Promise<TTSResponse> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    };
+
+    const res = await fetch(`${this.baseUrl}/tts/synthesize`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!res.ok) {
+      console.error('❌ TTS synthesis failed. Status:', res.status);
+      throw new Error('TTS synthesis failed');
+    }
+
+    const json: TTSResponse = await res.json();
+    console.log('✅ TTS synthesis successful:', json);
+    return json;
+  }
+
+  // Step 2: download audio file and return local uri
+  private async downloadAudioFile(audioFileName: string): Promise<string> {
+    const downloadUrl = `${this.baseUrl}/tts/audio/${audioFileName}`;
+    const audioFilePath = `${FileSystem.documentDirectory}${audioFileName}`;
+
+    const downloadResult = await FileSystem.downloadAsync(downloadUrl, audioFilePath);
+
+    if (downloadResult.status >= 200 && downloadResult.status < 300) {
+      return downloadResult.uri;
+    }
+
+    console.error('❌ Audio download failed. Status:', downloadResult.status);
+    throw new Error('Audio download failed');
+  }
+
+  // Step 3: download timing file if provided (best-effort, non-fatal)
+  private async downloadTimingIfPresent(timingFileName?: string | null): Promise<string> {
+    if (!timingFileName) throw new Error('No timing file name provided');
+
+    try {
+      const timingUrl = `${this.baseUrl}/tts/timing/${timingFileName}`;
+      const timingFilePath = `${FileSystem.documentDirectory}${timingFileName}`;
+      await FileSystem.downloadAsync(timingUrl, timingFilePath);
+      return timingFilePath;
+    } catch (err) {
+      throw new Error(`⚠️ Failed to download timing data: ${err}`);
     }
   }
 
@@ -105,7 +127,7 @@ class TTSService {
     questionText: string,
     answerText: string,
     options?: Partial<TTSRequest>
-  ): Promise<{ questionAudio: string; answerAudio: string }> {
+  ): Promise<{ questionAudio: AudioFileRef; answerAudio: AudioFileRef }> {
     console.log('🔊 Starting audio generation for card (new API):', cardId);
     const [questionAudio, answerAudio] = await Promise.all([
       this.generateTTS(questionText, options),
@@ -116,32 +138,23 @@ class TTSService {
   }
 
   // Get local timing information for an audio file
-  async getLocalTimingData(audioUri: string): Promise<any | null> {
+  async getLocalTimingData(localTimingUri: string): Promise<any> {
     try {
-      if (!audioUri) return null;
-
-      // Extract filename from the audio path and create timing filename
-      const audioFileName = audioUri.split('/').pop();
-      if (!audioFileName) return null;
-
-      const timingFileName = audioFileName.replace('.mp3', '_timing.json');
-      const timingFilePath = `${FileSystem.documentDirectory}${timingFileName}`;
+      if (!localTimingUri) return null;
 
       // Check if timing file exists
-      const fileInfo = await FileSystem.getInfoAsync(timingFilePath);
+      const fileInfo = await FileSystem.getInfoAsync(localTimingUri);
       if (!fileInfo.exists) {
-        console.log('📊 No local timing data found for:', audioFileName);
-        return null;
+        throw new Error('No local timing data found at ' + localTimingUri);
       }
 
       // Read and parse timing data
-      const timingContent = await FileSystem.readAsStringAsync(timingFilePath);
+      const timingContent = await FileSystem.readAsStringAsync(localTimingUri);
       const timingData = JSON.parse(timingContent);
 
       return timingData;
     } catch (error) {
-      console.error('❌ Error loading local timing data:', error);
-      return null;
+      throw new Error('Error loading local timing data: ' + error);
     }
   }
 
@@ -151,16 +164,11 @@ class TTSService {
       const timingUrl = `${this.baseUrl}/tts/timing/${filename}`;
       const localTimingFileName = `timing_${Date.now()}.json`;
       const timingFilePath = `${FileSystem.documentDirectory}${localTimingFileName}`;
-
-      console.log('📥 Downloading timing info from:', timingUrl);
       const downloadResult = await FileSystem.downloadAsync(timingUrl, timingFilePath);
 
       if (downloadResult.status >= 200 && downloadResult.status < 300) {
         const timingContent = await FileSystem.readAsStringAsync(downloadResult.uri);
         const timingData = JSON.parse(timingContent);
-        console.log('✅ Timing info downloaded:', timingData);
-
-        // Clean up the temporary file
         await FileSystem.deleteAsync(downloadResult.uri, { idempotent: true });
 
         return timingData;

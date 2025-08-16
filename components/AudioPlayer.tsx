@@ -27,7 +27,6 @@ const AudioPlayer = forwardRef(function AudioPlayer(
   const [hasTimerStarted, setHasTimerStarted] = useState(false);
   const tintColor = useThemeColor({}, 'tint');
   const isMountedRef = useRef(true);
-  console.log("uri", audioUri)
   // Accept both string (URL/path) and number (require asset ID)
   const player = useAudioPlayer(
     audioUri

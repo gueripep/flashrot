@@ -86,7 +86,7 @@ export function useCards(deckId: string) {
       const discussion: Discussion = {
         ssmlText: discussionSsml,
         text: discussionText,
-        audioFile: audioData
+        audio: audioData
       };
       console.log('Generated discussion:', discussion);
       return discussion;
@@ -132,8 +132,8 @@ export function useCards(deckId: string) {
       // Delete associated audio files
       await ttsService.deleteCardAudio(
         cardId,
-        cardToDelete?.finalCard.questionAudio,
-        cardToDelete?.finalCard.answerAudio
+        cardToDelete?.finalCard.questionAudio.filename,
+        cardToDelete?.finalCard.answerAudio.filename
       );
 
       const updatedCards = cards.filter(card => card.id !== cardId);

@@ -38,14 +38,24 @@ export enum Stage {
 export interface FinalCard {
     front: string;
     back: string;
-    questionAudio: string;
-    answerAudio: string;
+    // Grouped audio filename + timing filename
+    questionAudio: AudioFileRef;
+    answerAudio: AudioFileRef;
 }
 
 export interface Discussion {
     ssmlText: string;
     text: string;
-    audioFile?: string;
+    // Grouped audio filename + timing filename
+    audio: AudioFileRef;
+}
+
+/**
+ * Small helper type to pair an audio filename with its timing filename.
+ */
+export interface AudioFileRef {
+    filename: string;
+    timingFilename: string;
 }
 
 export interface StudySession {
