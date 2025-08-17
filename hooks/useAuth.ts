@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { AUTH_TOKEN_KEY } from '../constants/config';
+import { API_BASE_URL, AUTH_TOKEN_KEY } from '../constants/config';
 
 interface User {
     id: string;
@@ -22,8 +22,6 @@ interface AuthActions {
 
 const USER_DATA_KEY = 'user_data';
 
-// API base URL
-const API_BASE_URL = 'http://192.168.1.3:8000';
 
 const apiCall = async (endpoint: string, options: RequestInit = {}) => {
     const url = `${API_BASE_URL}${endpoint}`;

@@ -132,8 +132,8 @@ export function useCards(deckId: string) {
       // Delete associated audio files
       await ttsService.deleteCardAudio(
         cardId,
-        cardToDelete?.finalCard.questionAudio.filename,
-        cardToDelete?.finalCard.answerAudio.filename
+        cardToDelete?.finalCard.questionAudio.local_filename,
+        cardToDelete?.finalCard.answerAudio.local_filename
       );
 
       const updatedCards = cards.filter(card => card.id !== cardId);

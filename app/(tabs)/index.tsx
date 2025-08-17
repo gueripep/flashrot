@@ -50,6 +50,7 @@ export default function HomeScreen() {
   };
 
   const handleCreateDeck = async (newDeck: Deck) => {
+    console.log('Creating new deck:', newDeck);
     const success = await saveDeck(newDeck);
     if (success) {
       setModalVisible(false);

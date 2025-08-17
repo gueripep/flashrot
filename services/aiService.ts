@@ -1,6 +1,6 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AUTH_TOKEN_KEY } from '../constants/config';
+import { API_BASE_URL, AUTH_TOKEN_KEY } from '../constants/config';
 
 interface GenerationOptions {
   model?: string;
@@ -9,7 +9,7 @@ interface GenerationOptions {
 }
 
 class AIService {
-  private baseUrl = 'http://192.168.1.3:8000';
+  private baseUrl = API_BASE_URL;
   private readonly defaultModel = 'gemini-2.0-flash';
 
 

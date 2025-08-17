@@ -1,8 +1,9 @@
-import { AUTH_TOKEN_KEY } from '@/constants/config';
+import { API_BASE_URL } from '@/constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
-import { AudioFileRef } from './fsrsService';
+import { getAuthToken } from './authService';
+import { AudioFileRef, fsrsService } from './fsrsService';
 
 interface TTSRequest {
   text: string;
@@ -18,15 +19,15 @@ interface TTSResponse {
   created_at: string;
   id: number;
   processing_time_ms: number;
-  timing_file_name: string | null;
+  timing_file_name: string;
 }
 
 class TTSService {
   // Base URL for local TTS server. Note: Android emulator uses 10.0.2.2 for host machine.
   private baseUrl: string = Platform.select({
-    android: 'http://192.168.1.3:8000',
-    ios: 'http://192.168.1.3:8000',
-    default: 'http://192.168.1.3:8000',
+    android: API_BASE_URL,
+    ios: API_BASE_URL,
+    default: API_BASE_URL,
   })!;
 
   constructor() { }
@@ -45,7 +46,7 @@ class TTSService {
     };
 
     try {
-      const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+      const token = await getAuthToken();
       if (!token) {
         console.error('❌ No auth token found for TTS request');
         throw new Error('Authentication token is required for TTS requests');
@@ -53,17 +54,29 @@ class TTSService {
 
       // Step 1: synthesize on server
       const synthesizeResult = await this.synthesizeSpeech(requestBody, token);
+      //if not web platform, download the file
+      if (Platform.OS !== 'web') {
+        // Step 2: download audio
+        const audioUri = await this.downloadAudioFile(synthesizeResult.audio_file_name);
 
-      // Step 2: download audio
-      const audioUri = await this.downloadAudioFile(synthesizeResult.audio_file_name);
+        // Step 3: download timing data if provided (best-effort)
+        const timingFileUri = await this.downloadTimingIfPresent(synthesizeResult.timing_file_name);
+        const audioFileRef: AudioFileRef = {
+          local_filename: audioUri,
+          local_timingFilename: timingFileUri,
+        };
+        return audioFileRef;
+      }
+      else{
+        
+        const audioFileRef: AudioFileRef = {
+          local_filename: synthesizeResult.audio_file_name,
+          local_timingFilename: synthesizeResult.timing_file_name,
+        };
+        return audioFileRef;
+      }
 
-      // Step 3: download timing data if provided (best-effort)
-      const timingFileUri = await this.downloadTimingIfPresent(synthesizeResult.timing_file_name);
-      const audioFileRef: AudioFileRef = {
-        filename: audioUri,
-        timingFilename: timingFileUri,
-      };
-      return audioFileRef;
+  
     } catch (error) {
       console.error('❌ Error generating TTS:', error);
       throw error;
@@ -115,7 +128,7 @@ class TTSService {
     try {
       const timingUrl = `${this.baseUrl}/tts/timing/${timingFileName}`;
       const timingFilePath = `${FileSystem.documentDirectory}${timingFileName}`;
-      await FileSystem.downloadAsync(timingUrl, timingFilePath);
+
       return timingFilePath;
     } catch (err) {
       throw new Error(`⚠️ Failed to download timing data: ${err}`);
@@ -141,7 +154,7 @@ class TTSService {
   async getLocalTimingData(localTimingUri: string): Promise<any> {
     try {
       if (!localTimingUri) return null;
-
+      fsrsService.debugAsyncStorage();
       // Check if timing file exists
       const fileInfo = await FileSystem.getInfoAsync(localTimingUri);
       if (!fileInfo.exists) {

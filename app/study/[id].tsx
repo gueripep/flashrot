@@ -589,10 +589,10 @@ export default function StudyScreen() {
                       let audioLabel: string;
 
                       if (isDiscussionStage) {
-                        audioUri = currentCard?.discussion.audio.filename;
+                        audioUri = currentCard?.discussion.audio.local_filename;
                         audioLabel = 'Discussion Audio';
                       } else {
-                        audioUri = isFlipped ? currentCard?.finalCard.answerAudio.filename : currentCard?.finalCard.questionAudio.filename;
+                        audioUri = isFlipped ? currentCard?.finalCard.answerAudio.local_filename : currentCard?.finalCard.questionAudio.local_filename;
                         audioLabel = isFlipped ? 'Answer Audio' : 'Question Audio';
                       }
 

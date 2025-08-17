@@ -54,8 +54,8 @@ export interface Discussion {
  * Small helper type to pair an audio filename with its timing filename.
  */
 export interface AudioFileRef {
-    filename: string;
-    timingFilename: string;
+    local_filename: string;
+    local_timingFilename: string;
 }
 
 export interface StudySession {
@@ -960,7 +960,7 @@ class FSRSService {
     }
 
     // A helper function to log all AsyncStorage data
-    debugAsyncStorage = async () => {
+    public debugAsyncStorage = async () => {
         try {
             const keys = await AsyncStorage.getAllKeys();
             const items = await AsyncStorage.multiGet(keys);
