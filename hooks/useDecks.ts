@@ -1,15 +1,11 @@
 import { fsrsService } from '@/services/fsrsService';
-import {
-  addToSyncQueue,
-  getSyncQueue,
-  processSyncQueue as processGenericSyncQueue,
-  removeFromSyncQueue,
-} from '@/services/syncQueue';
+import { getSyncQueue } from '@/services/syncQueue';
+import { createSyncManager } from '@/services/syncService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { API_BASE_URL } from '../constants/config';
-import { fetchApiWithRefresh, getAuthHeaders } from '../services/authService';
+import { getAuthHeaders } from '../services/authService';
 
 interface Deck {
   id: string;
@@ -22,6 +18,10 @@ interface Deck {
 
 const STORAGE_KEY = 'flashcardDecks';
 const SYNC_QUEUE_KEY = 'flashcardDecksSyncQueue';
+
+  function isUUID(id: string) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  }
 
 
 export function useDecks() {
@@ -106,141 +106,35 @@ export function useDecks() {
   /* ---------- Background Sync helpers (generic) ---------- */
   // Generic sync queue operations are provided by services/syncQueue.ts
 
-  const updateLocalDeckAfterSync = async (deckId: string, updates: Partial<Deck>) => {
-    try {
-      // Read latest stored decks to avoid stale closures and race conditions
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      const localDecks: Deck[] = raw ? JSON.parse(raw) : [];
-      const idx = localDecks.findIndex(d => d.id === deckId);
-      if (idx >= 0) {
-        localDecks[idx] = { ...localDecks[idx], ...updates };
+  // create a generic sync manager for Deck
+  const syncManager = createSyncManager<Deck>({
+    resourcePath: '/decks',
+    storageKey: STORAGE_KEY,
+    syncQueueKey: SYNC_QUEUE_KEY,
+    getId: (d) => d.id,
+    mapServerResponseToId: (resp) => resp?.id ?? resp?.uuid,
+    transformCreateBody: (d) => ({ name: (d as any).name }),
+    transformUpdateBody: (d) => ({ name: (d as any).name, cardCount: (d as any).cardCount, createdAt: (d as any).createdAt }),
+    updateLocalAfterSync: async (localId, updates) => {
+      try {
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        const localDecks: Deck[] = raw ? JSON.parse(raw) : [];
+        const idx = localDecks.findIndex(d => d.id === localId);
+        if (idx >= 0) {
+          localDecks[idx] = { ...localDecks[idx], ...updates };
+        }
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(localDecks));
+        setDecks(localDecks);
+      } catch (e) {
+        console.error('Error updating local deck after sync:', e);
       }
+    },
+  });
 
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(localDecks));
-      setDecks(localDecks);
-    } catch (e) {
-      console.error('Error updating local deck after sync:', e);
-    }
-  };
-
-  const syncCreate = async (deck: Deck) => {
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      const res = await fetchApiWithRefresh(`${API_BASE_URL}/decks/`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          name: deck.name,
-        }),
-      });
-
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-
-      const data = await res.json();
-      await updateLocalDeckAfterSync(deck.id, { synced: true, id: data.id });
-      await removeFromSyncQueue<Deck>(SYNC_QUEUE_KEY, deck.id);
-      return true;
-    } catch (e) {
-      console.debug('syncCreate failed:', e);
-      return false;
-    }
-  };
-
-  const syncUpdate = async (deck: Deck) => {
-    try {
-      // If the deck doesn't have a server UUID id yet, treat as create
-      if (!isUUID(deck.id)) {
-        return await syncCreate(deck);
-      }
-
-      const headers = { 'Content-Type': 'application/json', ...(await getAuthHeaders()) };
-      const res = await fetch(`${API_BASE_URL}/decks/${deck.id}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({
-          name: deck.name,
-          cardCount: deck.cardCount,
-          createdAt: deck.createdAt,
-        }),
-      });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const data = await res.json();
-      await updateLocalDeckAfterSync(deck.id, { synced: true });
-      await removeFromSyncQueue<Deck>(SYNC_QUEUE_KEY, deck.id);
-      return true;
-    } catch (e) {
-      console.debug('syncUpdate failed:', e);
-      return false;
-    }
-  };
-
-  const syncDelete = async (deckId: string) => {
-    try {
-      const res = await fetchApiWithRefresh(`${API_BASE_URL}/decks/${deckId}`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      await removeFromSyncQueue<Deck>(SYNC_QUEUE_KEY, deckId);
-      return true;
-    } catch (e) {
-      console.debug('syncDelete failed:', e);
-      return false;
-    }
-  };
-
-  function isUUID(id: string) {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-  }
-
-  const enqueueDeckForSync = async (deck: Deck) => {
-    // Try an immediate sync; if fails, persist to queue
-    try {
-      const ok = await syncCreate(deck);
-      if (!ok) await addToSyncQueue<Deck>(SYNC_QUEUE_KEY, { type: 'create', item: deck });
-    } catch (e) {
-      console.error('enqueueDeckForSync error:', e);
-      await addToSyncQueue<Deck>(SYNC_QUEUE_KEY, { type: 'create', item: deck });
-    }
-  };
-
-  const enqueueUpdateForSync = async (deck: Deck) => {
-    try {
-      // If deck.id is not a UUID it hasn't been created on the server yet
-      // so perform a create instead. Enqueue the appropriate op on failure.
-      let ok: boolean;
-      if (isUUID(deck.id)) {
-        ok = await syncUpdate(deck);
-        if (!ok) await addToSyncQueue<Deck>(SYNC_QUEUE_KEY, { type: 'update', item: deck });
-      } else {
-        ok = await syncCreate(deck);
-        if (!ok) await addToSyncQueue<Deck>(SYNC_QUEUE_KEY, { type: 'create', item: deck });
-      }
-    } catch (e) {
-      console.error('enqueueUpdateForSync error:', e);
-      if (isUUID(deck.id)) {
-        await addToSyncQueue<Deck>(SYNC_QUEUE_KEY, { type: 'update', item: deck });
-      } else {
-        await addToSyncQueue<Deck>(SYNC_QUEUE_KEY, { type: 'create', item: deck });
-      }
-    }
-  };
-
-  const enqueueDeleteForSync = async (deckId: string) => {
-    try {
-      const ok = await syncDelete(deckId);
-      if (!ok) await addToSyncQueue<Deck>(SYNC_QUEUE_KEY, { type: 'delete', itemId: deckId });
-    } catch (e) {
-      console.error('enqueueDeleteForSync error:', e);
-      await addToSyncQueue<Deck>(SYNC_QUEUE_KEY, { type: 'delete', itemId: deckId });
-    }
-  };
-  const processSyncQueue = async () => {
-    await processGenericSyncQueue<Deck>(SYNC_QUEUE_KEY, {
-      create: syncCreate,
-      update: syncUpdate,
-      delete: syncDelete,
-    });
-  };
+  const enqueueDeckForSync = syncManager.enqueueCreate;
+  const enqueueUpdateForSync = syncManager.enqueueUpdate;
+  const enqueueDeleteForSync = syncManager.enqueueDelete;
+  const processSyncQueue = syncManager.processQueue;
 
   /* ---------- Fetch from server and merge ---------- */
 
@@ -278,7 +172,7 @@ export function useDecks() {
 
       // include any local-only decks that are pending sync (present in the sync queue)
       // per requirement: if a deck is local-only, not on the web, and not referenced in the sync queue, drop it
-      const syncQueue = await getSyncQueue<Deck>(SYNC_QUEUE_KEY);
+  const syncQueue = await getSyncQueue<Deck>(SYNC_QUEUE_KEY);
       const queuedIds = new Set<string>();
       for (const op of syncQueue) {
         if (op.type === 'delete' && 'itemId' in op && op.itemId) queuedIds.add(op.itemId);
