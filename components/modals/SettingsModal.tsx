@@ -1,7 +1,7 @@
 import { useAuthContext } from '@/contexts/AuthContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import React from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import {
   Button,
   Divider,
@@ -21,24 +21,8 @@ export default function SettingsModal({ visible, onDismiss }: SettingsModalProps
   const { logout, user } = useAuthContext();
 
   const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-            onDismiss();
-          },
-        },
-      ]
-    );
+    await logout();
+    onDismiss();
   };
 
   return (

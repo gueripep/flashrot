@@ -1,6 +1,10 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
-import { API_BASE_URL, AUTH_TOKEN_KEY } from '../constants/config';
+import {
+    getCurrentUser,
+    login as serviceLogin,
+    logout as serviceLogout,
+    register as serviceRegister,
+} from '../services/authService';
 
 interface User {
     id: string;
@@ -20,22 +24,7 @@ interface AuthActions {
     logout: () => Promise<void>;
 }
 
-const USER_DATA_KEY = 'user_data';
-
-
-const apiCall = async (endpoint: string, options: RequestInit = {}) => {
-    const url = `${API_BASE_URL}${endpoint}`;
-    try {
-        const response = await fetch(url, options);
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.detail || 'API error');
-        }
-        return { success: true, data };
-    } catch (error: any) {
-        return { success: false, error: error.message || 'Unknown error' };
-    }
-};
+// ...use service helpers from services/authService
 
 export function useAuth(): AuthState & AuthActions {
     const [user, setUser] = useState<User | null>(null);
@@ -53,50 +42,26 @@ export function useAuth(): AuthState & AuthActions {
     }, []);
 
     const checkAuthState = async () => {
-        try {
-            setIsLoading(true);
-            const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
-            const userData = await AsyncStorage.getItem(USER_DATA_KEY);
-
-            if (token && userData) {
-                const parsedUser = JSON.parse(userData);
-                console.log('Restoring user session:', parsedUser);
-                setUser(parsedUser);
-            } else {
-                console.log('No stored authentication found');
-                setUser(null);
-            }
-        } catch (error) {
-            console.error('Error checking auth state:', error);
-            setUser(null);
-        } finally {
-            setIsLoading(false);
+        setIsLoading(true);
+        const user = await getCurrentUser();
+        if (user) {
+            console.log('Restoring user session:', user);
+            setUser(user);
         }
+        else {
+            console.log('No stored authentication found');
+            setUser(null);
+        }
+        setIsLoading(false);
     };
 
     const login = async (email: string, password: string): Promise<boolean> => {
         try {
             setIsLoading(true);
-            const body = new URLSearchParams();
-            body.append("grant_type", "password");
-            body.append("username", email);
-            body.append("password", password);
-
-            const response = await apiCall('/auth/jwt/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: body.toString(),
-            });
-            console.log('Login response:', response);
-            if (response.success && response.data.access_token) {
-                console.log('Login successful:', response.data);
-                await AsyncStorage.setItem(AUTH_TOKEN_KEY, response.data.access_token);
-                // Create a minimal user object since server doesn't return user data
-                const userData = { id: 'user', email, name: email.split('@')[0] };
-                await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
-                
-                // Set user state immediately to trigger UI update
-                setUser(userData);
+            const ok = await serviceLogin(email, password);
+            if (ok) {
+                const storedUser = await getCurrentUser();
+                setUser(storedUser);
                 setIsLoading(false);
                 return true;
             }
@@ -114,16 +79,8 @@ export function useAuth(): AuthState & AuthActions {
         try {
             console.log("initiating registration");
             setIsLoading(true);
-            const response = await apiCall('/auth/register', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email, password, name }),
-            });
-
-            if (response.success) {
-                // Auto-login after successful registration
+            const ok = await serviceRegister(email, password, name);
+            if (ok) {
                 const loginSuccess = await login(email, password);
                 return loginSuccess;
             }
@@ -138,10 +95,7 @@ export function useAuth(): AuthState & AuthActions {
 
     const logout = async (): Promise<void> => {
         try {
-            // If your backend supports logout endpoint, call it here
-            await apiCall('/auth/jwt/logout', { method: 'POST' });
-            await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
-            await AsyncStorage.removeItem(USER_DATA_KEY);
+            await serviceLogout();
             setUser(null);
         } catch (error) {
             console.error('Logout error:', error);

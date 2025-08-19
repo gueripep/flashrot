@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { API_BASE_URL } from '../constants/config';
-import { getAuthHeaders } from '../services/authService';
+import { fetchApiWithRefresh, getAuthHeaders } from '../services/authService';
 
 interface Deck {
   id: string;
@@ -132,8 +132,8 @@ export function useDecks() {
 
   const syncCreate = async (deck: Deck) => {
     try {
-      const headers = { 'Content-Type': 'application/json', ...(await getAuthHeaders()) };
-      const res = await fetch(`${API_BASE_URL}/decks/`, {
+      const headers = { 'Content-Type': 'application/json' };
+      const res = await fetchApiWithRefresh(`${API_BASE_URL}/decks/`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -145,7 +145,7 @@ export function useDecks() {
 
       const data = await res.json();
       const remoteId = data.id ?? data.remoteId ?? undefined;
-      await updateLocalDeckAfterSync(deck.id, { synced: true, remoteId });
+      await updateLocalDeckAfterSync(deck.id, { synced: true, id: remoteId });
       await removeFromSyncQueue(deck.id);
       return true;
     } catch (e) {
@@ -170,7 +170,7 @@ export function useDecks() {
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       const data = await res.json();
       const remoteId = data.id ?? data.remoteId ?? deck.remoteId;
-      await updateLocalDeckAfterSync(deck.id, { synced: true, remoteId });
+      await updateLocalDeckAfterSync(deck.id, { synced: true, id: remoteId });
       await removeFromSyncQueue(deck.id);
       return true;
     } catch (e) {
@@ -181,15 +181,8 @@ export function useDecks() {
 
   const syncDelete = async (deckId: string) => {
     try {
-      // try to resolve a remoteId from local storage if possible
-      const localRaw = await AsyncStorage.getItem(STORAGE_KEY);
-      const localDecks: Deck[] = localRaw ? JSON.parse(localRaw) : [];
-      const local = localDecks.find(d => d.id === deckId);
-      const targetId = local?.remoteId ?? deckId;
-      const headers = { ...(await getAuthHeaders()) };
-      const res = await fetch(`${API_BASE_URL}/decks/${targetId}`, {
+      const res = await fetchApiWithRefresh(`${API_BASE_URL}/decks/${deckId}`, {
         method: 'DELETE',
-        headers,
       });
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
       await removeFromSyncQueue(deckId);
@@ -199,6 +192,10 @@ export function useDecks() {
       return false;
     }
   };
+
+  function isUUID(id: string) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  }
 
   const enqueueDeckForSync = async (deck: Deck) => {
     // Try an immediate sync; if fails, persist to queue
@@ -344,8 +341,11 @@ export function useDecks() {
       const updatedDecks = decks.filter(deck => deck.id !== deckId);
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedDecks));
       setDecks(updatedDecks);
-      // try to delete remotely, enqueue on failure
-      enqueueDeleteForSync(deckId).catch(err => console.debug('enqueueDeleteForSync err', err));
+      //if it is not an uuid it means the deck was not saved on servers
+      if (isUUID(deckId)) {
+        // try to delete remotely, enqueue on failure
+        enqueueDeleteForSync(deckId).catch(err => console.debug('enqueueDeleteForSync err', err));
+      }
       return true;
     } catch (error) {
       console.error('Error deleting deck:', error);
