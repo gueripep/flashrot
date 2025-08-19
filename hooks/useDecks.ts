@@ -1,11 +1,8 @@
 import { fsrsService } from '@/services/fsrsService';
-import { getSyncQueue } from '@/services/syncQueue';
 import { createSyncManager } from '@/services/syncService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
-import { API_BASE_URL } from '../constants/config';
-import { getAuthHeaders } from '../services/authService';
 
 interface Deck {
   id: string;
@@ -19,9 +16,9 @@ interface Deck {
 const STORAGE_KEY = 'flashcardDecks';
 const SYNC_QUEUE_KEY = 'flashcardDecksSyncQueue';
 
-  function isUUID(id: string) {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-  }
+function isUUID(id: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
 
 
 export function useDecks() {
@@ -38,7 +35,7 @@ export function useDecks() {
       // after loading local decks, try to flush local changes to server
       await processSyncQueue();
       // then fetch authoritative decks from server and merge
-      await fetchAndMergeFromServer();
+      await syncManager.fetchAndMerge();
       fsrsService.debugAsyncStorage();
     } catch (error) {
       console.error('Error loading decks:', error);
@@ -138,66 +135,7 @@ export function useDecks() {
 
   /* ---------- Fetch from server and merge ---------- */
 
-  const fetchAndMergeFromServer = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/decks/`, { headers: await getAuthHeaders() });
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      const serverDecks: any[] = await res.json();
-
-      // read latest local storage to avoid overwriting changes
-      const localRaw = await AsyncStorage.getItem(STORAGE_KEY);
-      const localDecks: Deck[] = localRaw ? JSON.parse(localRaw) : [];
-
-      const merged: Deck[] = [];
-
-      const seenLocalIds = new Set<string>();
-
-      for (const sd of serverDecks) {
-        // server's primary id is the canonical id (usually a UUID)
-        const serverId = sd.id ?? sd.uuid ?? undefined;
-        // try to find matching local deck by id
-        const localMatch = serverId ? localDecks.find(ld => ld.id === serverId) : undefined;
-
-        const mapped: Deck = {
-          id: localMatch?.id ?? (serverId ?? `${sd.name}-${sd.createdAt}`),
-          name: sd.name ?? localMatch?.name ?? 'Untitled',
-          cardCount: sd.cardCount ?? localMatch?.cardCount ?? 0,
-          createdAt: sd.createdAt ?? localMatch?.createdAt ?? new Date().toISOString(),
-          synced: true,
-        };
-
-        merged.push(mapped);
-        if (localMatch) seenLocalIds.add(localMatch.id);
-      }
-
-      // include any local-only decks that are pending sync (present in the sync queue)
-      // per requirement: if a deck is local-only, not on the web, and not referenced in the sync queue, drop it
-  const syncQueue = await getSyncQueue<Deck>(SYNC_QUEUE_KEY);
-      const queuedIds = new Set<string>();
-      for (const op of syncQueue) {
-        if (op.type === 'delete' && 'itemId' in op && op.itemId) queuedIds.add(op.itemId);
-        if ((op.type === 'create' || op.type === 'update') && 'item' in op && op.item) queuedIds.add((op as any).item.id);
-      }
-
-      for (const ld of localDecks) {
-        if (!seenLocalIds.has(ld.id)) {
-          // keep only if there's a pending sync operation for it
-          if (queuedIds.has(ld.id)) {
-            merged.push(ld);
-          } else {
-            console.debug('Dropping local-only deck not in sync queue:', ld.id);
-          }
-        }
-      }
-
-      // persist merged set and update state
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-      setDecks(merged);
-    } catch (e) {
-      // network error or server down - keep local decks as-is
-      console.debug('fetchAndMergeFromServer failed:', e);
-    }
-  };
+  // use syncManager.fetchAndMerge() instead of local implementation
 
 
   const getDeckById = (deckId: string): Deck | undefined => {
