@@ -229,19 +229,12 @@ export function useDecks() {
   };
 
   const processSyncQueue = async () => {
-    const MAX_RETRIES = 2;
     const queue = await getSyncQueue();
     if (!queue.length) return;
 
     const newQueue: SyncOp[] = [];
 
     for (const op of queue) {
-      // drop items that have already exhausted retries
-      if ((op.attempts ?? 0) >= MAX_RETRIES) {
-        console.debug('Dropping sync op after max attempts:', op);
-        continue;
-      }
-
       try {
         // eslint-disable-next-line no-await-in-loop
         let ok = false;
@@ -250,25 +243,21 @@ export function useDecks() {
         if (op.type === 'delete' && op.deckId) ok = await syncDelete(op.deckId);
 
         if (!ok) {
-          // increment attempts and requeue
+          // increment attempts and requeue (no hard cap)
           const nextAttempts = (op.attempts ?? 0) + 1;
           const attempted = { ...op, attempts: nextAttempts } as SyncOp;
-          if (nextAttempts >= MAX_RETRIES) {
-            console.debug('Reached max attempts, will drop op:', attempted);
-          } else {
-            newQueue.push(attempted);
-          }
+          newQueue.push(attempted);
         }
       } catch (e) {
         console.debug('processSyncQueue item failed:', e);
         const nextAttempts = (op.attempts ?? 0) + 1;
         const attempted = { ...op, attempts: nextAttempts } as SyncOp;
-        if (nextAttempts < MAX_RETRIES) newQueue.push(attempted);
-        else console.debug('Reached max attempts due to exception, dropping op:', attempted);
+        // requeue on exception as well
+        newQueue.push(attempted);
       }
     }
 
-    // persist the updated queue
+    // persist the updated queue (failed items are requeued indefinitely)
     await setSyncQueue(newQueue);
   };
 
