@@ -35,7 +35,7 @@ const BorderedText = ({ children, style, isHighlighted = false, ...props }: any)
 
                     // Only apply text shadow for non-highlighted words, with no offset
                     // ...(isHighlighted ? {} : {
-                        
+
                     // }),
                 }
             ]}>
@@ -84,10 +84,10 @@ export default function SubtitleDisplay({
     useEffect(() => {
         // We are ready to display subtitles if we should show the full text,
         // or if we have valid timing data.
-        
+
         // A small delay helps prevent a "flash" of content if data arrives quickly.
         const timer = setTimeout(() => setIsReady(true), 50);
-        
+
         return () => clearTimeout(timer);
     }, [timingData]);
 
@@ -106,12 +106,12 @@ export default function SubtitleDisplay({
                 (wordTiming.duration ? wordTiming.start_time + wordTiming.duration : wordTiming.start_time + 0.5);
 
             const isHighlighted = currentTime >= wordTiming.start_time && currentTime <= endTime;
-            
+
             if (isHighlighted) {
                 highlighted.add(index);
             }
         });
-        
+
         // Update the previous state reference
         previousHighlightedWords.current = new Set(highlighted);
         setHighlightedWords(highlighted);
@@ -124,14 +124,14 @@ export default function SubtitleDisplay({
 
         const maxWordsPerChunk = 4;
         const wordTimings = timingData.word_timings;
-        
+
         // Find the current word being spoken
         let currentWordIndex = -1;
         for (let i = 0; i < wordTimings.length; i++) {
             const wordTiming = wordTimings[i];
-            const endTime = wordTiming.end_time || 
+            const endTime = wordTiming.end_time ||
                 (wordTiming.duration ? wordTiming.start_time + wordTiming.duration : wordTiming.start_time + 0.5);
-            
+
             if (currentTime >= wordTiming.start_time && currentTime <= endTime) {
                 currentWordIndex = i;
                 break;
@@ -156,7 +156,7 @@ export default function SubtitleDisplay({
         // Find the chunk that contains the current word
         const chunkStartIndex = Math.floor(currentWordIndex / maxWordsPerChunk) * maxWordsPerChunk;
         const chunkEndIndex = Math.min(chunkStartIndex + maxWordsPerChunk, wordTimings.length);
-        
+
         return {
             words: wordTimings.slice(chunkStartIndex, chunkEndIndex),
             startIndex: chunkStartIndex
@@ -243,7 +243,11 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         lineHeight: 36,
         fontSize: 24,
-        fontFamily: Platform.OS === 'ios' ? 'Helvetica-Bold' : 'sans-serif-black',
+        fontFamily: Platform.select({
+            ios: 'Helvetica-Bold',
+            android: 'sans-serif-black',
+            web: 'Roboto, Arial, sans-serif',
+        })
     },
     highlightedWord: {
         // This style is now handled by BorderedText component

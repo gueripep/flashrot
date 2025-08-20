@@ -3,7 +3,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { Button, IconButton, ProgressBar, Text } from 'react-native-paper';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -61,6 +61,13 @@ const BackgroundVideo = ({
       }
     });
   });
+  
+  // fixes autoplay not working on web
+  useEffect(() => {
+    if (Platform.OS === 'web' && player && !paused) {
+      player.play();
+    }
+  }, [player]);
 
   return (
     <Animated.View style={[styles.backgroundVideoContainer, { zIndex }, animatedStyle]}>
@@ -730,7 +737,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: '100%',
     height: '100%',
-    opacity: 0.3,
+    opacity: 0.8,
   },
   centerContent: {
     flex: 1,

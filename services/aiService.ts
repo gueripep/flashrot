@@ -72,7 +72,8 @@ class AIService {
       `Front of card: ${front}`,
       `Back of card: ${back}`,
       '',
-      'Generated course:',
+      'Output plain text only. Do not include backticks, asterisks, or any other formatting.',
+      'Do not say anything else.'
     ].join('\n');
 
     const discussion = await this.generateContent(prompt, options);
