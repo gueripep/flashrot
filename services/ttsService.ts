@@ -1,8 +1,9 @@
-import { API_BASE_URL, AUTH_TOKEN_KEY } from '@/constants/config';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
-import { Platform } from 'react-native';
-import { AudioFileRef, fsrsService } from './fsrsService';
+import { API_BASE_URL, AUTH_TOKEN_KEY } from "@/constants/config";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system";
+import { Platform } from "react-native";
+import { fetchApiWithRefresh } from "./authService";
+import { AudioFileRef, fsrsService } from "./fsrsService";
 
 interface TTSRequest {
   text: string;
@@ -15,10 +16,12 @@ interface TTSRequest {
 
 interface TTSResponse {
   audio_file_name: string;
+  audio_file_url: string;
+  timing_file_name: string;
+  timing_file_url: string;
   created_at: string;
   id: number;
   processing_time_ms: number;
-  timing_file_name: string;
 }
 
 class TTSService {
@@ -29,79 +32,87 @@ class TTSService {
     default: API_BASE_URL,
   })!;
 
-  constructor() { }
+  constructor() {}
 
   // Generate TTS using the new API (orchestrates three steps)
-  async generateTTS(text: string, options?: Partial<TTSRequest>): Promise<AudioFileRef> {
-    if (!text || !text.trim()) throw new Error('Text cannot be empty');
+  async generateTTS(
+    text: string,
+    options?: Partial<TTSRequest>
+  ): Promise<AudioFileRef> {
+    if (!text || !text.trim()) throw new Error("Text cannot be empty");
 
     const requestBody: TTSRequest = {
       text: text.trim(),
       is_ssml: options?.is_ssml ?? false,
-      language_code: options?.language_code || 'en-US',
-      voice_name: options?.voice_name || 'en-US-Wavenet-D',
-      audio_encoding: options?.audio_encoding || 'MP3',
+      language_code: options?.language_code || "en-US",
+      voice_name: options?.voice_name || "en-US-Wavenet-D",
+      audio_encoding: options?.audio_encoding || "MP3",
       enable_time_pointing: options?.enable_time_pointing ?? true,
     };
 
     try {
       const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
       if (!token) {
-        console.error('❌ No auth token found for TTS request');
-        throw new Error('Authentication token is required for TTS requests');
+        console.error("❌ No auth token found for TTS request");
+        throw new Error("Authentication token is required for TTS requests");
       }
 
       // Step 1: synthesize on server
       const synthesizeResult = await this.synthesizeSpeech(requestBody, token);
-      //if not web platform, download the file
-      if (Platform.OS !== 'web') {
-        // Step 2: download audio
-        const audioUri = await this.downloadAudioFile(synthesizeResult.audio_file_name);
 
-        // Step 3: download timing data if provided (best-effort)
-        const timingFileUri = await this.downloadTimingIfPresent(synthesizeResult.timing_file_name);
+      if (Platform.OS === "web") {
         const audioFileRef: AudioFileRef = {
-          local_filename: audioUri,
-          local_timingFilename: timingFileUri,
+          filename: synthesizeResult.audio_file_name,
+          timing_filename: synthesizeResult.timing_file_name,
+          signed_url: synthesizeResult.audio_file_url,
+          timing_signed_url: synthesizeResult.timing_file_url,
+        };
+        console.log("✅ TTS generation successful (web):", audioFileRef);
+        return audioFileRef;
+      } else {
+        const audioUri = await this.downloadAudioFile(
+          synthesizeResult.audio_file_name
+        );
+        const timingFileUri = await this.downloadTimingIfPresent(
+          synthesizeResult.timing_file_name
+        );
+        const audioFileRef: AudioFileRef = {
+          filename: audioUri,
+          timing_filename: timingFileUri,
+          signed_url: synthesizeResult.audio_file_url,
+          timing_signed_url: synthesizeResult.timing_file_url,
         };
         return audioFileRef;
       }
-      else{
-        
-        const audioFileRef: AudioFileRef = {
-          local_filename: synthesizeResult.audio_file_name,
-          local_timingFilename: synthesizeResult.timing_file_name,
-        };
-        return audioFileRef;
-      }
-
-  
     } catch (error) {
-      console.error('❌ Error generating TTS:', error);
+      console.error("❌ Error generating TTS:", error);
       throw error;
     }
   }
 
   // Step 1: call synthesize endpoint and return parsed response
-  private async synthesizeSpeech(requestBody: TTSRequest, token: string): Promise<TTSResponse> {
+  private async synthesizeSpeech(
+    requestBody: TTSRequest,
+    token: string
+  ): Promise<TTSResponse> {
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     };
 
-    const res = await fetch(`${this.baseUrl}/tts/synthesize`, {
-      method: 'POST',
+    const res = await fetchApiWithRefresh(`${this.baseUrl}/tts/synthesize`, {
+      method: "POST",
       headers,
       body: JSON.stringify(requestBody),
     });
 
     if (!res.ok) {
-      console.error('❌ TTS synthesis failed. Status:', res.status);
-      throw new Error('TTS synthesis failed');
+      console.error("❌ TTS synthesis failed. Status:", res.status);
+      throw new Error("TTS synthesis failed");
     }
 
     const json: TTSResponse = await res.json();
-    console.log('✅ TTS synthesis successful:', json);
+    console.log("✅ TTS synthesis successful:", json);
     return json;
   }
 
@@ -110,19 +121,24 @@ class TTSService {
     const downloadUrl = `${this.baseUrl}/tts/audio/${audioFileName}`;
     const audioFilePath = `${FileSystem.documentDirectory}${audioFileName}`;
 
-    const downloadResult = await FileSystem.downloadAsync(downloadUrl, audioFilePath);
+    const downloadResult = await FileSystem.downloadAsync(
+      downloadUrl,
+      audioFilePath
+    );
 
     if (downloadResult.status >= 200 && downloadResult.status < 300) {
       return downloadResult.uri;
     }
 
-    console.error('❌ Audio download failed. Status:', downloadResult.status);
-    throw new Error('Audio download failed');
+    console.error("❌ Audio download failed. Status:", downloadResult.status);
+    throw new Error("Audio download failed");
   }
 
   // Step 3: download timing file if provided (best-effort, non-fatal)
-  private async downloadTimingIfPresent(timingFileName?: string | null): Promise<string> {
-    if (!timingFileName) throw new Error('No timing file name provided');
+  private async downloadTimingIfPresent(
+    timingFileName?: string | null
+  ): Promise<string> {
+    if (!timingFileName) throw new Error("No timing file name provided");
 
     try {
       const timingUrl = `${this.baseUrl}/tts/timing/${timingFileName}`;
@@ -140,33 +156,42 @@ class TTSService {
     answerText: string,
     options?: Partial<TTSRequest>
   ): Promise<{ questionAudio: AudioFileRef; answerAudio: AudioFileRef }> {
-    console.log('🔊 Starting audio generation for card (new API):', cardId);
+    console.log("🔊 Starting audio generation for card (new API):", cardId);
     const [questionAudio, answerAudio] = await Promise.all([
       this.generateTTS(questionText, options),
       this.generateTTS(answerText, options),
     ]);
     return { questionAudio, answerAudio };
-
   }
 
   // Get local timing information for an audio file
-  async getLocalTimingData(localTimingUri: string): Promise<any> {
+  async getTimingData(
+    timingUri: string,
+    isLocal: boolean = false
+  ): Promise<any> {
     try {
-      if (!localTimingUri) return null;
+      if (!timingUri) return null;
       fsrsService.debugAsyncStorage();
       // Check if timing file exists
-      const fileInfo = await FileSystem.getInfoAsync(localTimingUri);
-      if (!fileInfo.exists) {
-        throw new Error('No local timing data found at ' + localTimingUri);
+      if (isLocal) {
+        const fileInfo = await FileSystem.getInfoAsync(timingUri);
+        const timingContent = await FileSystem.readAsStringAsync(
+          timingUri
+        );
+        const timingData = JSON.parse(timingContent);
+        return timingData;
+      } else {
+        // Read and parse timing data
+        const timingFileResponse = await fetch(timingUri);
+        if (!timingFileResponse.ok) {
+          throw new Error("Error loading remote timing data");
+        }
+        const timingData = await timingFileResponse.json();
+        console.log("📊 Timing data loaded:", timingData);
+        return timingData;
       }
-
-      // Read and parse timing data
-      const timingContent = await FileSystem.readAsStringAsync(localTimingUri);
-      const timingData = JSON.parse(timingContent);
-
-      return timingData;
     } catch (error) {
-      throw new Error('Error loading local timing data: ' + error);
+      throw new Error("Error loading local timing data: " + error);
     }
   }
 
@@ -176,121 +201,153 @@ class TTSService {
       const timingUrl = `${this.baseUrl}/tts/timing/${filename}`;
       const localTimingFileName = `timing_${Date.now()}.json`;
       const timingFilePath = `${FileSystem.documentDirectory}${localTimingFileName}`;
-      const downloadResult = await FileSystem.downloadAsync(timingUrl, timingFilePath);
+      const downloadResult = await FileSystem.downloadAsync(
+        timingUrl,
+        timingFilePath
+      );
 
       if (downloadResult.status >= 200 && downloadResult.status < 300) {
-        const timingContent = await FileSystem.readAsStringAsync(downloadResult.uri);
+        const timingContent = await FileSystem.readAsStringAsync(
+          downloadResult.uri
+        );
         const timingData = JSON.parse(timingContent);
         await FileSystem.deleteAsync(downloadResult.uri, { idempotent: true });
 
         return timingData;
       }
 
-      console.error('❌ Timing download failed. Status:', downloadResult.status);
+      console.error(
+        "❌ Timing download failed. Status:",
+        downloadResult.status
+      );
       return null;
     } catch (error) {
-      console.error('❌ Error downloading timing info:', error);
+      console.error("❌ Error downloading timing info:", error);
       return null;
     }
   }
 
   // List available files on the server
-  async listServerFiles(): Promise<{ audio_files: string[]; timing_files: string[]; total_audio: number; total_timing: number } | null> {
+  async listServerFiles(): Promise<{
+    audio_files: string[];
+    timing_files: string[];
+    total_audio: number;
+    total_timing: number;
+  } | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/tts/list`);
+      const response = await fetchApiWithRefresh(`${this.baseUrl}/tts/list`);
 
       if (!response.ok) {
-        console.error('❌ Failed to list server files. Status:', response.status);
+        console.error(
+          "❌ Failed to list server files. Status:",
+          response.status
+        );
         return null;
       }
 
       const result = await response.json();
-      console.log('📋 Server files:', result);
+      console.log("📋 Server files:", result);
       return result;
     } catch (error) {
-      console.error('❌ Error listing server files:', error);
+      console.error("❌ Error listing server files:", error);
       return null;
     }
   }
 
-  async deleteCardAudio(cardId: string, questionAudio?: string, answerAudio?: string): Promise<void> {
+  async deleteCardAudio(
+    cardId: string,
+    questionAudio?: string,
+    answerAudio?: string
+  ): Promise<void> {
     try {
       // Delete audio files if paths are provided
       if (questionAudio) {
         await FileSystem.deleteAsync(questionAudio, { idempotent: true });
-        console.log('🗑️ Deleted question audio:', questionAudio);
+        console.log("🗑️ Deleted question audio:", questionAudio);
 
         // Also delete corresponding timing file
-        const timingFileName = questionAudio.split('/').pop()?.replace('.mp3', '_timing.json');
+        const timingFileName = questionAudio
+          .split("/")
+          .pop()
+          ?.replace(".mp3", "_timing.json");
         if (timingFileName) {
           const timingPath = `${FileSystem.documentDirectory}${timingFileName}`;
           await FileSystem.deleteAsync(timingPath, { idempotent: true });
-          console.log('🗑️ Deleted question timing data:', timingPath);
+          console.log("🗑️ Deleted question timing data:", timingPath);
         }
       }
       if (answerAudio) {
         await FileSystem.deleteAsync(answerAudio, { idempotent: true });
-        console.log('🗑️ Deleted answer audio:', answerAudio);
+        console.log("🗑️ Deleted answer audio:", answerAudio);
 
         // Also delete corresponding timing file
-        const timingFileName = answerAudio.split('/').pop()?.replace('.mp3', '_timing.json');
+        const timingFileName = answerAudio
+          .split("/")
+          .pop()
+          ?.replace(".mp3", "_timing.json");
         if (timingFileName) {
           const timingPath = `${FileSystem.documentDirectory}${timingFileName}`;
           await FileSystem.deleteAsync(timingPath, { idempotent: true });
-          console.log('🗑️ Deleted answer timing data:', timingPath);
+          console.log("🗑️ Deleted answer timing data:", timingPath);
         }
       }
 
       // Clean up any legacy AsyncStorage entries (backward compatibility)
       await AsyncStorage.removeItem(`card_audio_${cardId}`);
     } catch (error) {
-      console.error('Error deleting card audio:', error);
+      console.error("Error deleting card audio:", error);
     }
   }
 
   // Debug method to inspect audio files
   async debugAudioFiles(): Promise<void> {
     try {
-      console.log('🔍 DEBUG: Checking audio files...');
-      console.log('📁 Document Directory:', FileSystem.documentDirectory);
+      console.log("🔍 DEBUG: Checking audio files...");
+      console.log("📁 Document Directory:", FileSystem.documentDirectory);
 
       if (!FileSystem.documentDirectory) {
-        console.log('❌ No document directory available');
+        console.log("❌ No document directory available");
         return;
       }
 
-      const files = await FileSystem.readDirectoryAsync(FileSystem.documentDirectory);
-      const audioFiles = files.filter((file) => file.startsWith('tts_') && file.endsWith('.mp3'));
-      const timingFiles = files.filter((file) => file.startsWith('tts_') && file.endsWith('_timing.json'));
+      const files = await FileSystem.readDirectoryAsync(
+        FileSystem.documentDirectory
+      );
+      const audioFiles = files.filter(
+        (file) => file.startsWith("tts_") && file.endsWith(".mp3")
+      );
+      const timingFiles = files.filter(
+        (file) => file.startsWith("tts_") && file.endsWith("_timing.json")
+      );
 
-      console.log('🎵 Found', audioFiles.length, 'TTS audio files:');
+      console.log("🎵 Found", audioFiles.length, "TTS audio files:");
       audioFiles.forEach((file) => {
-        console.log('  📄', file);
+        console.log("  📄", file);
       });
 
-      console.log('📊 Found', timingFiles.length, 'TTS timing files:');
+      console.log("📊 Found", timingFiles.length, "TTS timing files:");
       timingFiles.forEach((file) => {
-        console.log('  📄', file);
+        console.log("  📄", file);
       });
 
       // Check AsyncStorage for audio metadata
       const keys = await AsyncStorage.getAllKeys();
-      const audioKeys = keys.filter((key) => key.startsWith('card_audio_'));
+      const audioKeys = keys.filter((key) => key.startsWith("card_audio_"));
 
-      console.log('💾 Found', audioKeys.length, 'audio metadata entries:');
+      console.log("💾 Found", audioKeys.length, "audio metadata entries:");
       for (const key of audioKeys) {
         const data = await AsyncStorage.getItem(key);
         if (data) {
           const audioData = JSON.parse(data);
-          console.log('  🔑', key, ':', {
-            questionAudio: audioData.questionAudio ? '✅' : '❌',
-            answerAudio: audioData.answerAudio ? '✅' : '❌',
+          console.log("  🔑", key, ":", {
+            questionAudio: audioData.questionAudio ? "✅" : "❌",
+            answerAudio: audioData.answerAudio ? "✅" : "❌",
             generatedAt: audioData.generatedAt,
           });
         }
       }
     } catch (error) {
-      console.error('❌ Error debugging audio files:', error);
+      console.error("❌ Error debugging audio files:", error);
     }
   }
 
@@ -298,14 +355,16 @@ class TTSService {
   isQuotaError(error: any): boolean {
     const errorString = JSON.stringify(error).toLowerCase();
     return (
-      errorString.includes('429') ||
-      errorString.includes('quota') ||
-      errorString.includes('resource_exhausted')
+      errorString.includes("429") ||
+      errorString.includes("quota") ||
+      errorString.includes("resource_exhausted")
     );
   }
 
   getErrorMessage(error: any): string {
-    return error?.message || 'An unexpected error occurred during TTS generation.';
+    return (
+      error?.message || "An unexpected error occurred during TTS generation."
+    );
   }
 }
 

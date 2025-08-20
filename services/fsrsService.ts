@@ -54,8 +54,10 @@ export interface Discussion {
  * Small helper type to pair an audio filename with its timing filename.
  */
 export interface AudioFileRef {
-    local_filename: string;
-    local_timingFilename: string;
+    filename?: string;
+    timing_filename?: string;
+    signed_url: string;
+    timing_signed_url: string;
 }
 
 export interface StudySession {

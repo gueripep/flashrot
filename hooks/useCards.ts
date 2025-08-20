@@ -34,7 +34,7 @@ export function useCards(deckId: string) {
     storageKey: STORAGE_KEY,
     syncQueueKey: SYNC_QUEUE_KEY,
     getId: (c) => c.id,
-    mapServerResponseToId: (resp) => resp?.id ?? resp?.uuid,
+    mapServerResponseToId: (resp) => resp?.id,
     transformCreateBody: (c) => ({
       deck_id: c.deckId,
       stage: c.stage,
@@ -42,20 +42,20 @@ export function useCards(deckId: string) {
         ssml_text: c.discussion.ssmlText,
         text: c.discussion.text,
         audio: {
-          filename: c.discussion.audio?.local_filename,
-          timing_filename: c.discussion.audio?.local_timingFilename,
+          filename: c.discussion.audio.filename,
+          timing_filename: c.discussion.audio.timing_filename,
         },
       },
       final_card: {
         front: c.final_card.front,
         back: c.final_card.back,
         question_audio: {
-          filename: c.final_card.question_audio?.local_filename,
-          timing_filename: c.final_card.question_audio?.local_timingFilename,
+          filename: c.final_card.question_audio.filename,
+          timing_filename: c.final_card.question_audio.timing_filename,
         },
         answer_audio: {
-          filename: c.final_card.answer_audio?.local_filename,
-          timing_filename: c.final_card.answer_audio?.local_timingFilename,
+          filename: c.final_card.answer_audio.filename,
+          timing_filename: c.final_card.answer_audio.timing_filename,
         },
       },
       fsrs: {
@@ -78,20 +78,20 @@ export function useCards(deckId: string) {
         ssml_text: c.discussion.ssmlText,
         text: c.discussion.text,
         audio: {
-          filename: c.discussion.audio?.local_filename,
-          timing_filename: c.discussion.audio?.local_timingFilename,
+          filename: c.discussion.audio.filename,
+          timing_filename: c.discussion.audio.timing_filename,
         },
       },
       final_card: {
         front: c.final_card.front,
         back: c.final_card.back,
         question_audio: {
-          filename: c.final_card.question_audio?.local_filename,
-          timing_filename: c.final_card.question_audio?.local_timingFilename,
+          filename: c.final_card.question_audio.filename,
+          timing_filename: c.final_card.question_audio.timing_filename,
         },
         answer_audio: {
-          filename: c.final_card.answer_audio?.local_filename,
-          timing_filename: c.final_card.answer_audio?.local_timingFilename,
+          filename: c.final_card.answer_audio.filename,
+          timing_filename: c.final_card.answer_audio.timing_filename,
         },
       },
       fsrs: {
@@ -238,6 +238,7 @@ export function useCards(deckId: string) {
 
   const deleteCard = async (cardId: string) => {
     try {
+      await AsyncStorage.clear();
       console.log('Deleting card:', cardId);
       // Find the card to get audio file paths
       const cardToDelete = cards.find(card => card.id === cardId);
@@ -245,8 +246,8 @@ export function useCards(deckId: string) {
       // Delete associated audio files
       await ttsService.deleteCardAudio(
         cardId,
-        cardToDelete?.final_card.question_audio.local_filename,
-        cardToDelete?.final_card.answer_audio.local_filename
+        cardToDelete?.final_card.question_audio.filename,
+        cardToDelete?.final_card.answer_audio.filename
       );
 
       const updatedCards = cards.filter(card => card.id !== cardId);

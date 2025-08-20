@@ -311,10 +311,11 @@ export default function StudyScreen() {
   // Reset animation values when card changes
   useEffect(() => {
     try {
+      console.log('🎭 StudyScreen: Resetting animation values for new card');
       translateY.value = 0;
       const newNextVideoSource = getVideoSource((fsrsCardIndex || 0) + 1);
       setNextVideoSource(newNextVideoSource);
-      setVideoLoaded(false); // Reset video loaded state
+      // setVideoLoaded(false); // Reset video loaded state
 
       // Clear any active timer
       clearRevealTimer();
@@ -393,14 +394,14 @@ export default function StudyScreen() {
 
         if (inDiscussionStage) {
           // In discussion stage, use discussion audio if available
-          timingUri = currentCard.discussion.audio.local_filename;
+          timingUri = currentCard.discussion.audio.timing_signed_url;
         } else {
           // In learning stage, use front/back audio as usual
-          timingUri = isFlipped ? currentCard.final_card.answer_audio.local_timingFilename : currentCard.final_card.question_audio.local_timingFilename;
+          timingUri = isFlipped ? currentCard.final_card.answer_audio.timing_signed_url : currentCard.final_card.question_audio.timing_signed_url;
         }
 
         if (timingUri) {
-          const timing = await ttsService.getLocalTimingData(timingUri);
+          const timing = await ttsService.getTimingData(timingUri);
           if (timing) {
             setTimingData(timing);
           } else {
@@ -589,10 +590,10 @@ export default function StudyScreen() {
                       let audioLabel: string;
 
                       if (isDiscussionStage) {
-                        audioUri = currentCard?.discussion.audio.local_filename;
+                        audioUri = currentCard?.discussion.audio.signed_url;
                         audioLabel = 'Discussion Audio';
                       } else {
-                        audioUri = isFlipped ? currentCard?.final_card.answer_audio.local_filename : currentCard?.final_card.question_audio.local_filename;
+                        audioUri = isFlipped ? currentCard?.final_card.answer_audio.signed_url : currentCard?.final_card.question_audio.signed_url;
                         audioLabel = isFlipped ? 'Answer Audio' : 'Question Audio';
                       }
 
