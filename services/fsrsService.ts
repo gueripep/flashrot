@@ -23,7 +23,7 @@ export interface FlashCard {
     // Ai generated discussion
     discussion: Discussion;
     // flash card with back and front
-    finalCard: FinalCard;
+    final_card: FinalCard;
 
 
     // FSRS data
@@ -39,8 +39,8 @@ export interface FinalCard {
     front: string;
     back: string;
     // Grouped audio filename + timing filename
-    questionAudio: AudioFileRef;
-    answerAudio: AudioFileRef;
+    question_audio: AudioFileRef;
+    answer_audio: AudioFileRef;
 }
 
 export interface Discussion {

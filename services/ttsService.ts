@@ -1,8 +1,7 @@
-import { API_BASE_URL } from '@/constants/config';
+import { API_BASE_URL, AUTH_TOKEN_KEY } from '@/constants/config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
-import { getAuthToken } from './authService';
 import { AudioFileRef, fsrsService } from './fsrsService';
 
 interface TTSRequest {
@@ -46,7 +45,7 @@ class TTSService {
     };
 
     try {
-      const token = await getAuthToken();
+      const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
       if (!token) {
         console.error('❌ No auth token found for TTS request');
         throw new Error('Authentication token is required for TTS requests');

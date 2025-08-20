@@ -322,7 +322,7 @@ export default function DeckScreen() {
         visible={showAddCardModal}
         onDismiss={() => setShowAddCardModal(false)}
         onSaveCard={handleSaveCard}
-        initialCard={editingCard ? { front: editingCard.finalCard.front, back: editingCard.finalCard.back } : null}
+        initialCard={editingCard ? { front: editingCard.final_card.front, back: editingCard.final_card.back } : null}
         mode={editingCard ? 'edit' : 'add'}
       />
 
@@ -330,7 +330,7 @@ export default function DeckScreen() {
         visible={showDeleteModal}
         onDismiss={() => setShowDeleteModal(false)}
         onConfirm={handleConfirmDelete}
-        deckName={selectedCard?.finalCard.front || 'this card'}
+        deckName={selectedCard?.final_card.front || 'this card'}
       />
     </>
   );

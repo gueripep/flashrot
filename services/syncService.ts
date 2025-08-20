@@ -2,10 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../constants/config';
 import { fetchApiWithRefresh } from './authService';
 import {
-    addToSyncQueue,
-    getSyncQueue,
-    processSyncQueue as processGenericSyncQueue,
-    removeFromSyncQueue,
+  addToSyncQueue,
+  getSyncQueue,
+  processSyncQueue as processGenericSyncQueue,
+  removeFromSyncQueue,
 } from './syncQueue';
 
 export type SyncManagerOptions<T> = {
@@ -152,13 +152,20 @@ export function createSyncManager<T>(opts: SyncManagerOptions<T>) {
   };
 
   const fetchAndMerge = async () => {
+    console.log('[fetchAndMerge] Starting fetch and merge for', opts.resourcePath);
     try {
+      console.log('[fetchAndMerge] Fetching from server:', `${API_BASE_URL}${opts.resourcePath}/`);
       const res = await fetchApiWithRefresh(`${API_BASE_URL}${opts.resourcePath}/`);
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      if (!res.ok) {
+        console.log('[fetchAndMerge] Server returned error status:', res.status);
+        throw new Error(`Server returned ${res.status}`);
+      }
       const serverItems: any[] = await res.json();
+      console.log('[fetchAndMerge] Server items:', serverItems);
 
       const raw = await AsyncStorage.getItem(opts.storageKey);
       const localItems: T[] = raw ? JSON.parse(raw) : [];
+      console.log('[fetchAndMerge] Local items:', localItems);
 
       const merged: T[] = [];
       const seenLocalIds = new Set<string>();
@@ -168,14 +175,17 @@ export function createSyncManager<T>(opts: SyncManagerOptions<T>) {
         const localMatch = serverId ? localItems.find(li => opts.getId(li) === serverId) : undefined;
 
         let mapped: T;
-        if (opts.mapServerToLocal) mapped = opts.mapServerToLocal(si, localMatch);
-        else {
+        if (opts.mapServerToLocal) {
+          mapped = opts.mapServerToLocal(si, localMatch);
+          console.log('[fetchAndMerge] Used custom mapServerToLocal for server item:', serverId, mapped);
+        } else {
           // best-effort generic mapping: prefer localMatch fields, overlay server fields, set id to server/local
           const base: any = localMatch ? { ...(localMatch as any) } : {};
           const serverCopy = { ...(si as any) };
           base.id = (localMatch as any)?.id ?? (serverId ?? `${serverCopy.name}-${serverCopy.createdAt}`);
           const mergedObj = { ...base, ...serverCopy, synced: true };
           mapped = mergedObj as T;
+          console.log('[fetchAndMerge] Merged server/local item:', serverId, mapped);
         }
 
         merged.push(mapped);
@@ -184,24 +194,40 @@ export function createSyncManager<T>(opts: SyncManagerOptions<T>) {
 
       // include local-only items only if present in sync queue
       const syncQueue = await getSyncQueue<T>(opts.syncQueueKey);
+      console.log('[fetchAndMerge] Sync queue:', syncQueue);
       const queuedIds = new Set<string>();
       for (const op of syncQueue) {
-        if (op.type === 'delete' && 'itemId' in op && op.itemId) queuedIds.add(op.itemId as string);
-        if ((op.type === 'create' || op.type === 'update') && 'item' in op && op.item) queuedIds.add((op as any).item.id);
-      }
-
-      for (const li of localItems) {
-        if (!seenLocalIds.has(opts.getId(li))) {
-          if (queuedIds.has(opts.getId(li))) merged.push(li);
-          else console.debug('Dropping local-only item not in sync queue:', opts.getId(li));
+        if (op.type === 'delete' && 'itemId' in op && op.itemId) {
+          queuedIds.add(op.itemId as string);
+          console.log('[fetchAndMerge] Queued delete for itemId:', op.itemId);
+        }
+        if ((op.type === 'create' || op.type === 'update') && 'item' in op && op.item) {
+          queuedIds.add((op as any).item.id);
+          console.log('[fetchAndMerge] Queued', op.type, 'for item id:', (op as any).item.id);
         }
       }
 
+      for (const li of localItems) {
+        const localId = opts.getId(li);
+        if (!seenLocalIds.has(localId)) {
+          if (queuedIds.has(localId)) {
+            merged.push(li);
+            console.log('[fetchAndMerge] Including local-only item in queue:', localId);
+          } else {
+            console.log('[fetchAndMerge] Dropping local-only item not in sync queue:', localId);
+          }
+        }
+      }
+
+      console.log('[fetchAndMerge] Final merged items:', merged);
       await AsyncStorage.setItem(opts.storageKey, JSON.stringify(merged));
-      if (opts.updateState) opts.updateState(merged);
+      if (opts.updateState) {
+        console.log('[fetchAndMerge] Calling updateState callback');
+        opts.updateState(merged);
+      }
       return merged;
     } catch (e) {
-      console.debug('fetchAndMerge failed:', e);
+      console.log('fetchAndMerge failed:', e);
       return null;
     }
   };

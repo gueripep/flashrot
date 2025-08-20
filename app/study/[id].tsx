@@ -393,10 +393,10 @@ export default function StudyScreen() {
 
         if (inDiscussionStage) {
           // In discussion stage, use discussion audio if available
-          timingUri = currentCard.discussion.audio.timingFilename;
+          timingUri = currentCard.discussion.audio.local_filename;
         } else {
           // In learning stage, use front/back audio as usual
-          timingUri = isFlipped ? currentCard.finalCard.answerAudio.timingFilename : currentCard.finalCard.questionAudio.timingFilename;
+          timingUri = isFlipped ? currentCard.final_card.answer_audio.local_timingFilename : currentCard.final_card.question_audio.local_timingFilename;
         }
 
         if (timingUri) {
@@ -576,7 +576,7 @@ export default function StudyScreen() {
                     <SubtitleDisplay
                       text={isDiscussionStage
                         ? currentCard?.discussion.text || ''
-                        : (isFlipped ? currentCard?.finalCard.back || '' : currentCard?.finalCard.front || '')
+                        : (isFlipped ? currentCard?.final_card.back || '' : currentCard?.final_card.front || '')
                       }
                       timingData={timingData}
                       currentTime={audioPosition}
@@ -592,7 +592,7 @@ export default function StudyScreen() {
                         audioUri = currentCard?.discussion.audio.local_filename;
                         audioLabel = 'Discussion Audio';
                       } else {
-                        audioUri = isFlipped ? currentCard?.finalCard.answerAudio.local_filename : currentCard?.finalCard.questionAudio.local_filename;
+                        audioUri = isFlipped ? currentCard?.final_card.answer_audio.local_filename : currentCard?.final_card.question_audio.local_filename;
                         audioLabel = isFlipped ? 'Answer Audio' : 'Question Audio';
                       }
 

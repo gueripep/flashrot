@@ -37,6 +37,10 @@ export function useDecks() {
       // then fetch authoritative decks from server and merge
       await syncManager.fetchAndMerge();
       fsrsService.debugAsyncStorage();
+      const newStoredDecks = await AsyncStorage.getItem(STORAGE_KEY);
+      if (newStoredDecks) {
+        setDecks(JSON.parse(newStoredDecks));
+      }
     } catch (error) {
       console.error('Error loading decks:', error);
       Alert.alert('Error', 'Failed to load decks');

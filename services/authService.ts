@@ -87,7 +87,7 @@ export async function getCurrentUser(){
 }
 
 export async function register(email: string, password: string, name: string): Promise<boolean> {
-  const response = await fetch('/auth/register', {
+  const response = await fetch(`${API_BASE_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, name }),

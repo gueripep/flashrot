@@ -1,5 +1,6 @@
 import { aiService } from '@/services/aiService';
 import { Discussion, FinalCard, FlashCard, fsrsService, Stage } from '@/services/fsrsService';
+import { createSyncManager } from '@/services/syncService';
 import { ttsService } from '@/services/ttsService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
@@ -21,6 +22,111 @@ export function useCards(deckId: string) {
   const [loading, setLoading] = useState(true);
 
   const STORAGE_KEY = `flashcards_${deckId}`;
+  const SYNC_QUEUE_KEY = `flashcardsSyncQueue_${deckId}`;
+
+  function isUUID(id: string) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  }
+
+  // Sync manager for cards
+  const syncManager = createSyncManager<FlashCard>({
+    resourcePath: '/flashcards',
+    storageKey: STORAGE_KEY,
+    syncQueueKey: SYNC_QUEUE_KEY,
+    getId: (c) => c.id,
+    mapServerResponseToId: (resp) => resp?.id ?? resp?.uuid,
+    transformCreateBody: (c) => ({
+      deck_id: c.deckId,
+      stage: c.stage,
+      discussion: {
+        ssml_text: c.discussion.ssmlText,
+        text: c.discussion.text,
+        audio: {
+          filename: c.discussion.audio?.local_filename,
+          timing_filename: c.discussion.audio?.local_timingFilename,
+        },
+      },
+      final_card: {
+        front: c.final_card.front,
+        back: c.final_card.back,
+        question_audio: {
+          filename: c.final_card.question_audio?.local_filename,
+          timing_filename: c.final_card.question_audio?.local_timingFilename,
+        },
+        answer_audio: {
+          filename: c.final_card.answer_audio?.local_filename,
+          timing_filename: c.final_card.answer_audio?.local_timingFilename,
+        },
+      },
+      fsrs: {
+        due: c.fsrs.due,
+        stability: c.fsrs.stability,
+        difficulty: c.fsrs.difficulty,
+        elapsed_days: c.fsrs.elapsed_days,
+        scheduled_days: c.fsrs.scheduled_days,
+        reps: c.fsrs.reps,
+        lapses: c.fsrs.lapses,
+        state: c.fsrs.state,
+        learning_steps: c.fsrs.learning_steps,
+        audio_id: (c.fsrs as any).audio_id ?? 0,
+      },
+    }),
+    transformUpdateBody: (c) => ({
+      deck_id: c.deckId,
+      stage: c.stage,
+      discussion: {
+        ssml_text: c.discussion.ssmlText,
+        text: c.discussion.text,
+        audio: {
+          filename: c.discussion.audio?.local_filename,
+          timing_filename: c.discussion.audio?.local_timingFilename,
+        },
+      },
+      final_card: {
+        front: c.final_card.front,
+        back: c.final_card.back,
+        question_audio: {
+          filename: c.final_card.question_audio?.local_filename,
+          timing_filename: c.final_card.question_audio?.local_timingFilename,
+        },
+        answer_audio: {
+          filename: c.final_card.answer_audio?.local_filename,
+          timing_filename: c.final_card.answer_audio?.local_timingFilename,
+        },
+      },
+      fsrs: {
+        due: c.fsrs.due,
+        stability: c.fsrs.stability,
+        difficulty: c.fsrs.difficulty,
+        elapsed_days: c.fsrs.elapsed_days,
+        scheduled_days: c.fsrs.scheduled_days,
+        reps: c.fsrs.reps,
+        lapses: c.fsrs.lapses,
+        state: c.fsrs.state,
+        learning_steps: c.fsrs.learning_steps,
+        audio_id: (c.fsrs as any).audio_id ?? 0,
+      },
+    }),
+    updateLocalAfterSync: async (localId, updates) => {
+      try {
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        const localCards: FlashCard[] = raw ? JSON.parse(raw) : [];
+        const idx = localCards.findIndex(c => c.id === localId);
+        if (idx >= 0) {
+          localCards[idx] = { ...localCards[idx], ...updates };
+        }
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(localCards));
+        setCards(localCards);
+      } catch (e) {
+        console.error('Error updating local card after sync:', e);
+      }
+    },
+  });
+
+  const enqueueCardForSync = syncManager.enqueueCreate;
+  const enqueueUpdateForSync = syncManager.enqueueUpdate;
+  const enqueueDeleteForSync = syncManager.enqueueDelete;
+  const processSyncQueue = syncManager.processQueue;
 
   const loadCards = async () => {
     try {
@@ -30,9 +136,13 @@ export function useCards(deckId: string) {
         const parsedCards: FlashCard[] = JSON.parse(storedCards);
         setCards(parsedCards);
       } else {
-        // No cards found, initialize with empty array
         setCards([]);
       }
+      // after loading local cards, try to flush local changes to server
+      await processSyncQueue();
+      // then fetch authoritative cards from server and merge
+      await syncManager.fetchAndMerge();
+      fsrsService.debugAsyncStorage();
     } catch (error) {
       console.error('Error loading cards:', error);
       Alert.alert('Error', 'Failed to load cards');
@@ -58,16 +168,19 @@ export function useCards(deckId: string) {
       const card: FlashCard = {
         ...baseCard,
         discussion,
-        finalCard,
+        final_card: finalCard,
         fsrs,
         stage: Stage.Discussion,
       };
       // Only save the card after all processing is complete
       const updatedCards = [...cards, card];
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
-      console.log('Card saved:', card);
       setCards(updatedCards);
-
+      // Try to sync to server in background; if it fails we enqueue for retry
+      enqueueCardForSync(card).catch(err => {
+        // already handled in enqueue; swallow here but log for debug
+        console.debug('enqueueCardForSync error:', err);
+      });
       return true;
     } catch (error) {
       console.error('Error saving card:', error);
@@ -117,8 +230,8 @@ export function useCards(deckId: string) {
     const card: FinalCard = {
       front: front.trim(),
       back: useAI ? '' : back.trim(),
-      questionAudio: audioData.questionAudio,
-      answerAudio: audioData.answerAudio
+      question_audio: audioData.questionAudio,
+      answer_audio: audioData.answerAudio
     };
     return card;
   };
@@ -132,13 +245,17 @@ export function useCards(deckId: string) {
       // Delete associated audio files
       await ttsService.deleteCardAudio(
         cardId,
-        cardToDelete?.finalCard.questionAudio.local_filename,
-        cardToDelete?.finalCard.answerAudio.local_filename
+        cardToDelete?.final_card.question_audio.local_filename,
+        cardToDelete?.final_card.answer_audio.local_filename
       );
 
       const updatedCards = cards.filter(card => card.id !== cardId);
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
       setCards(updatedCards);
+      // If it is a uuid it means the card was saved on server
+      if (isUUID(cardId)) {
+        enqueueDeleteForSync(cardId).catch(err => console.debug('enqueueDeleteForSync err', err));
+      }
       return true;
     } catch (error) {
       console.error('Error deleting card:', error);
@@ -151,11 +268,14 @@ export function useCards(deckId: string) {
     try {
       const updatedCards = cards.map(card =>
         card.id === cardId
-          ? { ...card, front: front.trim(), back: back.trim() }
+          ? { ...card, final_card: { ...card.final_card, front: front.trim(), back: back.trim() } }
           : card
       );
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
       setCards(updatedCards);
+      // try to sync update remotely; enqueue on failure
+      const updatedLocal = updatedCards.find(c => c.id === cardId);
+      if (updatedLocal) enqueueUpdateForSync(updatedLocal).catch(err => console.debug('enqueueUpdateForSync err', err));
       return true;
     } catch (error) {
       console.error('Error updating card:', error);
@@ -187,9 +307,19 @@ export function useCards(deckId: string) {
 
   // Load cards on hook initialization
   useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
     if (deckId) {
       loadCards();
+      // attempt any pending syncs when the hook initializes
+      processSyncQueue();
+      // set up periodic retry every 30 seconds while mounted
+      interval = setInterval(() => {
+        processSyncQueue();
+      }, 30_000);
     }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [deckId]);
 
   return {

@@ -1,15 +1,15 @@
-import { AntDesign } from '@expo/vector-icons';
-import { useState } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { GestureDetector } from 'react-native-gesture-handler';
-import { Card, Text } from 'react-native-paper';
-import Animated from 'react-native-reanimated';
+import { AntDesign } from "@expo/vector-icons";
+import { useState } from "react";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
+import { Card, Text } from "react-native-paper";
+import Animated from "react-native-reanimated";
 
-import AudioPlayer from '@/components/AudioPlayer';
-import DeleteConfirmationModal from '@/components/modals/DeleteConfirmationModal';
-import { useSwipeGesture } from '@/hooks/useSwipeGesture';
-import { useThemeColor } from '@/hooks/useThemeColor';
-import { FlashCard } from '@/services/fsrsService';
+import AudioPlayer from "@/components/AudioPlayer";
+import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
+import { useSwipeGesture } from "@/hooks/useSwipeGesture";
+import { useThemeColor } from "@/hooks/useThemeColor";
+import { FlashCard } from "@/services/fsrsService";
 
 interface FlashCardItemProps {
   card: FlashCard;
@@ -26,9 +26,9 @@ export default function FlashCardItem({
   onEdit,
   onDelete,
 }: FlashCardItemProps) {
-  const textColor = useThemeColor({}, 'text');
-  const cardBackgroundColor = useThemeColor({}, 'cardBackground');
-  
+  const textColor = useThemeColor({}, "text");
+  const cardBackgroundColor = useThemeColor({}, "cardBackground");
+
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const {
@@ -86,7 +86,12 @@ export default function FlashCardItem({
         {/* Card with gesture */}
         <GestureDetector gesture={panGesture}>
           <Animated.View style={animatedStyle}>
-            <Card style={[styles.flashCard, { backgroundColor: cardBackgroundColor }]}>
+            <Card
+              style={[
+                styles.flashCard,
+                { backgroundColor: cardBackgroundColor },
+              ]}
+            >
               <Card.Content style={styles.cardContent}>
                 <TouchableOpacity
                   style={styles.cardTouchable}
@@ -94,21 +99,37 @@ export default function FlashCardItem({
                   activeOpacity={0.7}
                 >
                   <View style={styles.cardHeader}>
-                    <Text variant="bodySmall" style={{ color: textColor, opacity: 0.6, marginBottom: 8 }}>
-                      {isFlipped ? 'Back' : 'Front'}
+                    <Text
+                      variant="bodySmall"
+                      style={{
+                        color: textColor,
+                        opacity: 0.6,
+                        marginBottom: 8,
+                      }}
+                    >
+                      {isFlipped ? "Back" : "Front"}
                     </Text>
                     {/* Show audio player if TTS is available for current side */}
-                    {((isFlipped && card.finalCard.answerAudio) || (!isFlipped && card.finalCard.questionAudio)) && (
-                      <View style={styles.audioPlayerContainer}>
-                        <AudioPlayer 
-                          audioUri={isFlipped ? card.finalCard.answerAudio : card.finalCard.questionAudio}
-                          size={20}
-                        />
-                      </View>
-                    )}
+                    <View style={styles.audioPlayerContainer}>
+                      <AudioPlayer
+                        audioUri={
+                          isFlipped
+                            ? card.final_card.answer_audio.local_filename
+                            : card.final_card.question_audio.local_filename
+                        }
+                        size={20}
+                      />
+                    </View>
                   </View>
-                  <Text variant="bodyLarge" style={{ color: textColor, textAlign: 'center', lineHeight: 24 }}>
-                    {isFlipped ? card.finalCard.back : card.finalCard.front}
+                  <Text
+                    variant="bodyLarge"
+                    style={{
+                      color: textColor,
+                      textAlign: "center",
+                      lineHeight: 24,
+                    }}
+                  >
+                    {isFlipped ? card.final_card.back : card.final_card.front}
                   </Text>
                 </TouchableOpacity>
               </Card.Content>
@@ -121,7 +142,7 @@ export default function FlashCardItem({
         visible={showDeleteModal}
         onDismiss={handleDeleteCancel}
         onConfirm={handleDeleteConfirm}
-        deckName={card.finalCard.front}
+        deckName={card.final_card.front}
       />
     </>
   );
@@ -130,55 +151,55 @@ export default function FlashCardItem({
 const styles = StyleSheet.create({
   cardContainer: {
     marginBottom: 12,
-    position: 'relative',
-    width: '100%',
+    position: "relative",
+    width: "100%",
   },
   deleteBackground: {
-    position: 'absolute',
+    position: "absolute",
     right: 0,
     top: 0,
     bottom: 0,
-    width: '50%',
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    backgroundColor: '#dc3545',
+    width: "50%",
+    justifyContent: "center",
+    alignItems: "flex-end",
+    backgroundColor: "#dc3545",
     borderRadius: 12,
     paddingRight: 20,
   },
   editBackground: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     top: 0,
     bottom: 0,
-    width: '50%',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    backgroundColor: '#007bff',
+    width: "50%",
+    justifyContent: "center",
+    alignItems: "flex-start",
+    backgroundColor: "#007bff",
     borderRadius: 12,
     paddingLeft: 20,
   },
   flashCard: {
     minHeight: 120,
     borderRadius: 12,
-    width: '100%',
+    width: "100%",
   },
   cardContent: {
-    justifyContent: 'space-between',
-    alignItems: 'stretch',
+    justifyContent: "space-between",
+    alignItems: "stretch",
     minHeight: 100,
-    position: 'relative',
+    position: "relative",
   },
   cardTouchable: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     minHeight: 100,
   },
   cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
     marginBottom: 8,
   },
   audioPlayerContainer: {
