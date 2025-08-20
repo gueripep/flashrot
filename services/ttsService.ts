@@ -64,8 +64,10 @@ class TTSService {
         const audioFileRef: AudioFileRef = {
           filename: synthesizeResult.audio_file_name,
           timing_filename: synthesizeResult.timing_file_name,
-          signed_url: synthesizeResult.audio_file_url,
-          timing_signed_url: synthesizeResult.timing_file_url,
+          signed_url_files: {
+            audio_file: synthesizeResult.audio_file_url,
+            timing_file: synthesizeResult.timing_file_url,
+          },
         };
         console.log("✅ TTS generation successful (web):", audioFileRef);
         return audioFileRef;
@@ -77,10 +79,17 @@ class TTSService {
           synthesizeResult.timing_file_name
         );
         const audioFileRef: AudioFileRef = {
-          filename: audioUri,
-          timing_filename: timingFileUri,
-          signed_url: synthesizeResult.audio_file_url,
-          timing_signed_url: synthesizeResult.timing_file_url,
+
+          filename: synthesizeResult.audio_file_name,
+          timing_filename: synthesizeResult.timing_file_name,
+          local_files: {
+            audio_file: audioUri,
+            timing_file: timingFileUri,
+          },
+          signed_url_files: {
+            audio_file: synthesizeResult.audio_file_url,
+            timing_file: synthesizeResult.timing_file_url,
+          },
         };
         return audioFileRef;
       }

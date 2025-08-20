@@ -16,8 +16,8 @@ import {
 export interface FlashCard {
     // Original card data
     id: string;
-    createdAt: string;
-    deckId: string;
+    created_at: string;
+    deck_id: string;
     stage: Stage;
 
     // Ai generated discussion
@@ -54,10 +54,15 @@ export interface Discussion {
  * Small helper type to pair an audio filename with its timing filename.
  */
 export interface AudioFileRef {
-    filename?: string;
-    timing_filename?: string;
-    signed_url: string;
-    timing_signed_url: string;
+    filename: string;
+    timing_filename: string;
+    local_files?: TimedAudioFiles;
+    signed_url_files: TimedAudioFiles;
+}
+
+export interface TimedAudioFiles{
+    audio_file: string;
+    timing_file: string;
 }
 
 export interface StudySession {
@@ -691,7 +696,7 @@ class FSRSService {
                 // Reset FSRS data for each card
                 const resetCards = cards.map(card => ({
                     ...card,
-                    fsrs: this.createNewFSRSCard(card.id, card.deckId),
+                    fsrs: this.createNewFSRSCard(card.id, card.deck_id),
                     stage: Stage.Discussion
                 }));
 
@@ -726,7 +731,7 @@ class FSRSService {
                         hasChanges = true;
                         return {
                             ...card,
-                            fsrs: this.createNewFSRSCard(card.id, card.deckId)
+                            fsrs: this.createNewFSRSCard(card.id, card.deck_id)
                         };
                     }
                     return card;

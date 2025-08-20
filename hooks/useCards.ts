@@ -36,7 +36,7 @@ export function useCards(deckId: string) {
     getId: (c) => c.id,
     mapServerResponseToId: (resp) => resp?.id,
     transformCreateBody: (c) => ({
-      deck_id: c.deckId,
+      deck_id: c.deck_id,
       stage: c.stage,
       discussion: {
         ssml_text: c.discussion.ssmlText,
@@ -72,7 +72,7 @@ export function useCards(deckId: string) {
       },
     }),
     transformUpdateBody: (c) => ({
-      deck_id: c.deckId,
+      deck_id: c.deck_id,
       stage: c.stage,
       discussion: {
         ssml_text: c.discussion.ssmlText,
@@ -155,8 +155,8 @@ export function useCards(deckId: string) {
     try {
       const baseCard = {
         id: Date.now().toString(),
-        createdAt: new Date().toISOString(),
-        deckId: deckId,
+        created_at: new Date().toISOString(),
+        deck_id: deckId,
       };
       // Generate ai discussion
       const discussion = await getDiscussion(front, back);
@@ -246,8 +246,8 @@ export function useCards(deckId: string) {
       // Delete associated audio files
       await ttsService.deleteCardAudio(
         cardId,
-        cardToDelete?.final_card.question_audio.filename,
-        cardToDelete?.final_card.answer_audio.filename
+        cardToDelete?.final_card.question_audio.local_files?.audio_file,
+        cardToDelete?.final_card.answer_audio.local_files?.audio_file
       );
 
       const updatedCards = cards.filter(card => card.id !== cardId);
