@@ -287,6 +287,7 @@ export function useCards(deckId: string) {
 
   const updateCardStage = async (cardId: string, stage: Stage) => {
     try {
+      // schedules the card a day later
       const updatedCards = cards.map(card =>
         card.id === cardId
           ? { ...card, stage, fsrs: { ...card.fsrs, due: new Date(Date.now() + 23 * 60 * 60 * 1000) } }

@@ -298,7 +298,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
   };
 
   // Current card and session info
-  const currentCard = studyCards[currentCardIndex] || null;
+  const fsrsCurrentCard = studyCards[currentCardIndex] || null;
   // Fix progress calculation: show how many cards have been COMPLETED, not just started
   const progress = studyCards.length > 0 ? currentCardIndex / studyCards.length : 0;
   const isLastCard = currentCardIndex === studyCards.length - 1;
@@ -308,7 +308,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
     // Cards and data
     enhancedCards,
     studyCards,
-    currentCard,
+    fsrsCurrentCard,
     studyStats,
     loading,
 

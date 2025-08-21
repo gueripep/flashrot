@@ -1,15 +1,16 @@
 import { AntDesign } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { TouchableOpacity, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { Button, IconButton, ProgressBar, Text } from 'react-native-paper';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AudioPlayer from '@/components/AudioPlayer';
+import BackgroundVideo, { FullScreenContainer } from '@/components/StudyBackground';
+import { styles } from '@/components/StudyStyles';
 import SubtitleDisplay from '@/components/SubtitleDisplay';
 import { useCards } from '@/hooks/useCards';
 import { useDecks } from '@/hooks/useDecks';
@@ -27,79 +28,14 @@ interface Deck {
   cards?: FlashCard[];
 }
 
-// Background Video Component
-const BackgroundVideo = ({
-  videoSource,
-  animatedStyle,
-  zIndex = -1,
-  paused = false,
-  onVideoLoaded
-}: {
-  videoSource: any;
-  animatedStyle?: any;
-  zIndex?: number;
-  paused?: boolean;
-  onVideoLoaded?: () => void;
-}) => {
-  const player = useVideoPlayer(videoSource, player => {
-    player.loop = true;
-    player.muted = true;
-    if (paused) {
-      player.pause();
-    } else {
-      player.play();
-    }
-
-    // Notify when the video is ready
-    player.addListener('sourceChange', () => {
-      if (onVideoLoaded) {
-        console.log('Video loaded callback triggered');
-
-        setTimeout(() => {
-          onVideoLoaded();
-        }, 200); // Delay the callback by 200 milliseconds
-      }
-    });
-  });
-  
-  // fixes autoplay not working on web
-  useEffect(() => {
-    if (Platform.OS === 'web' && player && !paused) {
-      player.play();
-    }
-  }, [player]);
-
-  return (
-    <Animated.View style={[styles.backgroundVideoContainer, { zIndex }, animatedStyle]}>
-      <VideoView
-        style={styles.backgroundVideo}
-        player={player}
-        allowsFullscreen={false}
-        allowsPictureInPicture={false}
-        nativeControls={false}
-        contentFit="cover"
-      />
-    </Animated.View>
-  );
-};
-
-// Full Screen Container with Background Video
-const FullScreenContainer = ({ children }: { children: React.ReactNode }) => (
-  <View style={styles.fullScreenContainer}>
-    <BackgroundVideo videoSource={require('@/assets/videos/parkour.mp4')} />
-    <SafeAreaView style={styles.safeAreaContainer}>
-      <View style={styles.container}>
-        {children}
-      </View>
-    </SafeAreaView>
-  </View>
-);
+// BackgroundVideo and FullScreenContainer moved to components/StudyBackground
 
 export default function StudyScreen() {
   const { id, mode } = useLocalSearchParams<{ id: string; mode?: string }>();
   const router = useRouter();
   const tickerAudioPlayerRef = useRef<{ playAudio: () => void, stopAudio: () => void } | null>(null);
-
+  const mainAudioPlayerRef = useRef<{ playAudio: () => void, stopAudio: () => void } | null>(null);
+  const backgroundVideoRef = useRef<{ playVideo: () => void } | null>(null);
   const navigation = useNavigation();
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
@@ -114,20 +50,15 @@ export default function StudyScreen() {
 
   // FSRS Integration
   const {
-    studyCards,
-    currentCard: fsrsCurrentCard,
+    fsrsCurrentCard,
     isStudyActive,
     currentCardIndex: fsrsCardIndex,
     progress: fsrsProgress,
-    cardsRemaining,
     isLastCard,
     startStudySession,
-    endStudySession,
     reviewCard,
-    nextCard: fsrsNextCard,
-    getReviewOptions,
-    getRatingLabels,
-    loading: fsrsLoading
+    loading: fsrsLoading,
+    nextCard
   } = useFSRSStudy(id || '', cards);
 
   useLayoutEffect(() => {
@@ -160,12 +91,13 @@ export default function StudyScreen() {
   const [currentDeck, setCurrentDeck] = useState<Deck | null>(null);
   const [isFlipped, setIsFlipped] = useState(false);
   const [studyComplete, setStudyComplete] = useState(false);
+  //used for subtitle display
   const [audioPosition, setAudioPosition] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [timingData, setTimingData] = useState<any>(null);
   const [showRatingButtons, setShowRatingButtons] = useState(false);
+  //used for calculating the amount of time spent on a card and giving to fsrs
   const [reviewStartTime, setReviewStartTime] = useState<Date | null>(null);
-  const [isDiscussionStage, setIsDiscussionStage] = useState(false);
   const [isProcessingRating, setIsProcessingRating] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [nextVideoSource, setNextVideoSource] = useState<any>(null);
@@ -175,23 +107,12 @@ export default function StudyScreen() {
   const [countdownInterval, setCountdownInterval] = useState<number | null>(null);
 
   const loading = decksLoading || cardsLoading || fsrsLoading;
+  const isDiscussionStage = fsrsCurrentCard?.stage === Stage.Discussion;
 
   // TikTok-style swipe gesture for rating based on like state
   const handleSwipeUp = () => {
     console.log('👆 StudyScreen: handleSwipeUp called', { isFlipped, showRatingButtons, isDiscussionStage, isProcessingRating, isLiked });
     try {
-      if (isProcessingRating) {
-        console.log('⚠️ StudyScreen: handleSwipeUp blocked - already processing rating');
-        return;
-      }
-
-      if (!currentCard) {
-        console.log('⚠️ StudyScreen: handleSwipeUp blocked - missing data', {
-          hasCurrentCard: !!currentCard,
-        });
-        return;
-      }
-
       setIsProcessingRating(true);
 
       // Use the rating based on like state
@@ -207,6 +128,7 @@ export default function StudyScreen() {
         const rating = getRatingFromLikeState(isLiked);
         handleFSRSRating(rating);
       }
+      handleNextCardOrComplete();
 
       console.log(`👍 StudyScreen: Triggering ${isLiked ? 'Hard' : 'Good'} rating via swipe`);
     } catch (error) {
@@ -280,13 +202,7 @@ export default function StudyScreen() {
     })
     .onChange((event) => {
       'worklet';
-      // Only respond to upward swipes when card is flipped
-
-      // Only allow upward swipes (negative Y)
       if (event.translationY >= 0) return;
-
-      // Move the entire container up as user swipes
-      // Clamp between 0 and -screenHeight to prevent over-scrolling
       const maxTranslate = -containerHeight.value;
       translateY.value = Math.max(Math.min(event.translationY, 0), maxTranslate);
     })
@@ -318,15 +234,17 @@ export default function StudyScreen() {
   // Reset animation values when card changes
   useEffect(() => {
     try {
+      if (!videoLoaded) return;
       console.log('🎭 StudyScreen: Resetting animation values for new card');
       translateY.value = 0;
       const newNextVideoSource = getVideoSource((fsrsCardIndex || 0) + 1);
       setNextVideoSource(newNextVideoSource);
-      // setVideoLoaded(false); // Reset video loaded state
+      setVideoLoaded(false); // Reset video loaded state
 
       // Clear any active timer
       clearRevealTimer();
-
+      loadTimingData();
+      mainAudioPlayerRef.current?.playAudio();
       console.log('✅ StudyScreen: Animation values reset successfully');
     } catch (error) {
       console.error('❌ StudyScreen: Error resetting animation values', error);
@@ -380,52 +298,41 @@ export default function StudyScreen() {
   }, [id, cards, isStudyActive, startStudySession]);
 
   // Load timing data when card changes
-  useEffect(() => {
-    const loadTimingData = async () => {
-      // Always use FSRS current card
-      const currentCard = fsrsCurrentCard;
-      if (!currentCard) return;
 
-      // Check if we're in discussion stage
-      const inDiscussionStage = currentCard.stage === Stage.Discussion;
-      if (inDiscussionStage) {
-        console.log("currentCard.discussion.text:", currentCard.discussion.text);
+  async function loadTimingData() {
+    // Always use FSRS current card
+    const currentCard = fsrsCurrentCard;
+    if (!currentCard) return;
+
+    // Check if we're in discussion stage
+    setTimingData(null);
+
+    try {
+      // Get timing data for the current audio using local files
+      let timingUri: string;
+
+  const isInDiscussionStage = currentCard.stage === Stage.Discussion;
+
+      if (isInDiscussionStage) {
+        // In discussion stage, use discussion audio if available
+        timingUri = currentCard.discussion.audio.signed_url_files.timing_file;
+      } else {
+        // In learning stage, use front/back audio as usual
+        timingUri = isFlipped ? currentCard.final_card.answer_audio.signed_url_files.timing_file : currentCard.final_card.question_audio.signed_url_files.timing_file;
       }
-      setIsDiscussionStage(inDiscussionStage);
 
-      setTimingData(null);
-
-      try {
-        // Get timing data for the current audio using local files
-        let timingUri: string;
-
-        if (inDiscussionStage) {
-          // In discussion stage, use discussion audio if available
-          timingUri = currentCard.discussion.audio.signed_url_files.timing_file;
+      if (timingUri) {
+        const timing = await ttsService.getTimingData(timingUri);
+        if (timing) {
+          setTimingData(timing);
         } else {
-          // In learning stage, use front/back audio as usual
-          timingUri = isFlipped ? currentCard.final_card.answer_audio.signed_url_files.timing_file : currentCard.final_card.question_audio.signed_url_files.timing_file;
+          console.log('⚠️ No timing data available for this card');
         }
-
-        if (timingUri) {
-          const timing = await ttsService.getTimingData(timingUri);
-          if (timing) {
-            setTimingData(timing);
-          } else {
-            console.log('⚠️ No timing data available for this card');
-          }
-        }
-      } catch (error) {
-        console.log('⚠️ Error loading timing data:', error);
       }
-    };
-
-    loadTimingData();
-  }, [fsrsCardIndex, isFlipped, fsrsCurrentCard]);
-
-  // Get current card and progress from FSRS
-  const currentCard = fsrsCurrentCard;
-  const progress = fsrsProgress;
+    } catch (error) {
+      console.log('⚠️ Error loading timing data:', error);
+    }
+  };
 
   const handleFlip = () => {
     // Clear any active timer
@@ -447,53 +354,38 @@ export default function StudyScreen() {
     if (isLastCard) {
       setStudyComplete(true);
     } else {
-      const hasNext = fsrsNextCard();
-      if (hasNext) {
-        console.log('🎭 StudyScreen: Moving to next card');
-        // Reset state for next card
-        setIsFlipped(false);
-        setAudioPosition(0);
-        setIsDiscussionStage(false); // Reset discussion stage for next card
-        setIsLiked(false); // Reset like state for next card
-        clearRevealTimer(); // Clear any active timer
-        // Don't force audio playing state - let AudioPlayer handle it
-        setReviewStartTime(null);
-      } else {
-        setStudyComplete(true);
-      }
+      console.log('🎭 StudyScreen: Moving to next card');
+      // Reset state for next card
+      setIsFlipped(false);
+      setAudioPosition(0);
+      setIsLiked(false); // Reset like state for next card
+      clearRevealTimer(); // Clear any active timer
+      setReviewStartTime(null);
+      mainAudioPlayerRef.current?.stopAudio();
+      nextCard();
+      // loadTimingData(); // Load timing data for the next card
+
+      // there is some other stuff happening for handling next card, but it waits for the videoLoaded useState
     }
   };
 
   const handleDiscussionNext = async () => {
-    if (!currentCard) return;
-
+    if (!fsrsCurrentCard) return;
     try {
       // Update the card's stage to Learning in storage
-      const success = await updateCardStage(currentCard.id, Stage.Learning);
-      setIsProcessingRating(false); // Reset processing state
-      if (success) {
-        // Update local state to reflect the change
-        setIsDiscussionStage(false);
-        handleNextCardOrComplete();
-      } else {
-        console.error('Failed to update card stage');
-      }
+      await updateCardStage(fsrsCurrentCard.id, Stage.Learning);
+      setIsProcessingRating(false);
     } catch (error) {
       console.error('Error transitioning from discussion to learning:', error);
     }
   };
 
   const handleFSRSRating = async (rating: Rating) => {
-    if (!currentCard || !reviewStartTime) return;
-    let success: boolean;
+    if (!fsrsCurrentCard || !reviewStartTime) return;
     const timeTaken = (new Date().getTime() - reviewStartTime.getTime()) / 1000;
     // Record the review with FSRS
-    success = await reviewCard(rating, timeTaken);
+    await reviewCard(rating, timeTaken);
     setIsProcessingRating(false); // Reset processing state
-
-    if (success) {
-      handleNextCardOrComplete();
-    }
   };
 
   const handleFinish = () => {
@@ -557,7 +449,7 @@ export default function StudyScreen() {
       >
         {/* Progress Bar - fixed position */}
         <View style={styles.progressContainerFixed}>
-          <ProgressBar progress={progress} color={tintColor} style={styles.progressBar} />
+          <ProgressBar progress={fsrsProgress} color={tintColor} style={styles.progressBar} />
         </View>
 
         {/* Double-height animated container for TikTok-style scrolling */}
@@ -568,6 +460,7 @@ export default function StudyScreen() {
               videoSource={currentVideoSource}
               zIndex={-1}
               onVideoLoaded={() => setVideoLoaded(true)}
+              ref={backgroundVideoRef}
             />
             <AudioPlayer
               audioUri={require('@/assets/audio/timer-tick.mp3')}
@@ -583,8 +476,8 @@ export default function StudyScreen() {
                     {/* Subtitle Display */}
                     <SubtitleDisplay
                       text={isDiscussionStage
-                        ? currentCard?.discussion.text || ''
-                        : (isFlipped ? currentCard?.final_card.back || '' : currentCard?.final_card.front || '')
+                        ? fsrsCurrentCard?.discussion.text || ''
+                        : (isFlipped ? fsrsCurrentCard?.final_card.back || '' : fsrsCurrentCard?.final_card.front || '')
                       }
                       timingData={timingData}
                       currentTime={audioPosition}
@@ -597,22 +490,22 @@ export default function StudyScreen() {
                       let audioLabel: string;
 
                       if (isDiscussionStage) {
-                        audioUri = currentCard?.discussion.audio.signed_url_files.audio_file;
+                        audioUri = fsrsCurrentCard?.discussion.audio.signed_url_files.audio_file;
                         audioLabel = 'Discussion Audio';
                       } else {
-                        audioUri = isFlipped ? currentCard?.final_card.answer_audio.signed_url_files.audio_file : currentCard?.final_card.question_audio.signed_url_files.audio_file;
+                        audioUri = isFlipped ? fsrsCurrentCard?.final_card.answer_audio.signed_url_files.audio_file : fsrsCurrentCard?.final_card.question_audio.signed_url_files.audio_file;
                         audioLabel = isFlipped ? 'Answer Audio' : 'Question Audio';
                       }
-
                       return audioUri ? (
                         <View style={[styles.audioContainer, { display: 'none' }]}>
                           <AudioPlayer
                             audioUri={audioUri}
-                            autoPlay={true} // Always autoplay when TTS is enabled
+                            autoPlay={false}
                             size={24}
                             onPositionChange={setAudioPosition}
                             onPlayStateChange={setIsAudioPlaying}
                             onAudioFinished={handleAudioFinished}
+                            ref={mainAudioPlayerRef}
                           />
                           <Text variant="bodySmall" style={{ color: textColor, textAlign: 'center', marginTop: 8 }}>
                             {audioLabel}
@@ -691,157 +584,4 @@ export default function StudyScreen() {
   }
 }
 
-const styles = StyleSheet.create({
-  likeButtonContainer: {
-    position: 'absolute',
-    bottom: 300,
-    right: 5,
-    zIndex: 1,
-  },
-  fullScreenContainer: {
-    flex: 1,
-    position: 'relative',
-    overflow: 'hidden', // Clip the double-height container
-  },
-  doubleHeightContainer: {
-    height: '200%', // Double the screen height
-    position: 'relative',
-  },
-  cardSection: {
-    height: '50%', // Each section takes half the double-height container (i.e., full screen)
-    position: 'relative',
-  },
-  safeAreaContainer: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  container: {
-    flex: 1,
-    padding: 16,
-  },
-  backgroundVideoContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
-    zIndex: -1,
-  },
-  backgroundVideo: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
-    opacity: 0.8,
-  },
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  progressContainer: {
-    marginBottom: 24,
-  },
-  progressContainerFixed: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 1,
-    backgroundColor: 'transparent',
-  },
-  progressBar: {
-    position: 'absolute',
-    alignSelf: 'center',
-    marginTop: 48,
-    height: 8,
-    borderRadius: 4,
-    width: '90%',
-  },
-  fsrsContainer: {
-    marginBottom: 16,
-  },
-  hintContainer: {
-    marginBottom: 32,
-  },
-  completionContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  completionButtons: {
-    marginTop: 32,
-    gap: 12,
-    width: '100%',
-  },
-  button: {
-    marginVertical: 4,
-  },
-  audioContainer: {
-    alignItems: 'center',
-    marginBottom: 16,
-    padding: 16,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  flipContainer: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  flipButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 8,
-  },
-  nextCardPreview: {
-    position: 'absolute',
-    top: '40%',
-    left: 0,
-    right: 0,
-    zIndex: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  nextCardContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  nextCardText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-  swipeHint: {
-    textAlign: 'center',
-    fontSize: 14,
-    marginBottom: 12,
-    opacity: 0.7,
-    fontStyle: 'italic',
-  },
-  timerContainer: {
-    alignItems: 'center',
-    marginBottom: 16,
-    padding: 20,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  timerText: {
-    fontSize: 64,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
-  },
-});
+// styles moved to components/StudyStyles
