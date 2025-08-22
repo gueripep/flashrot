@@ -1,8 +1,15 @@
+import { API_BASE_URL } from '@/constants/config';
+import { fetchApiWithRefresh } from '@/services/authService';
 import {
   FlashCard,
   fsrsService,
   Rating
 } from '@/services/fsrsService';
+import {
+  addToSyncQueue,
+  processSyncQueue as processGenericSyncQueue,
+  removeFromSyncQueue,
+} from '@/services/syncQueue';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 
@@ -31,6 +38,73 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
   const [isStartingSession, setIsStartingSession] = useState(false);
   const lastStartAttempt = useRef<number>(0);
   const lastRefreshAttempt = useRef<number>(0);
+
+  const FSRS_SYNC_QUEUE_KEY = `fsrsSyncQueue_${deckId}`;
+
+  function isUUID(id: string) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  }
+
+  // Custom FSRS sync functions
+  const syncFSRSUpdate = async (card: FlashCard): Promise<boolean> => {
+    try {
+      const body = {
+        flashcard_id: card.id,
+        due: card.fsrs.due,
+        stability: card.fsrs.stability,
+        difficulty: card.fsrs.difficulty,
+        elapsed_days: card.fsrs.elapsed_days,
+        scheduled_days: card.fsrs.scheduled_days,
+        reps: card.fsrs.reps,
+        lapses: card.fsrs.lapses,
+        state: card.fsrs.state,
+        learning_steps: card.fsrs.learning_steps,
+      };
+
+      const res = await fetchApiWithRefresh(`${API_BASE_URL}/flashcards/${card.id}/fsrs`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      
+      // Remove from sync queue on success
+      await removeFromSyncQueue<FlashCard>(FSRS_SYNC_QUEUE_KEY, card.id);
+      return true;
+    } catch (e) {
+      console.debug('syncFSRSUpdate failed:', e);
+      return false;
+    }
+  };
+
+  const enqueueFSRSUpdateForSync = async (card: FlashCard) => {
+    try {
+      // Only sync if card has UUID (is synced to server)
+      console.debug('enqueueFSRSUpdateForSync called for card:', card.id);
+
+      if (!isUUID(card.id)) {
+        console.debug('Skipping FSRS sync for non-UUID card:', card.id);
+        return;
+      }
+
+      const success = await syncFSRSUpdate(card);
+      if (!success) {
+        await addToSyncQueue<FlashCard>(FSRS_SYNC_QUEUE_KEY, { type: 'update', item: card });
+      }
+    } catch (e) {
+      console.error('enqueueFSRSUpdateForSync error:', e);
+      await addToSyncQueue<FlashCard>(FSRS_SYNC_QUEUE_KEY, { type: 'update', item: card });
+    }
+  };
+
+  const processFSRSSyncQueue = async () => {
+    await processGenericSyncQueue<FlashCard>(FSRS_SYNC_QUEUE_KEY, {
+      update: syncFSRSUpdate,
+      create: () => Promise.resolve(false), // Not used for FSRS
+      delete: () => Promise.resolve(false), // Not used for FSRS
+    });
+  };
 
   const loadEnhancedCards = useCallback(async () => {
     try {
@@ -69,6 +143,25 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       loadStudyStats();
     }
   }, [deckId, enhancedCards.length, loadStudyStats]); // Use length instead of the full array to prevent unnecessary re-renders
+
+  // Setup periodic FSRS sync processing
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+    
+    if (deckId) {
+      // Process any pending FSRS syncs when hook initializes
+      processFSRSSyncQueue();
+      
+      // Set up periodic retry every 30 seconds while mounted
+      interval = setInterval(() => {
+        processFSRSSyncQueue();
+      }, 30_000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [deckId]);
 
   /**
    * Start a study session with specified options
@@ -184,8 +277,9 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       if (!isStudyActive || currentCardIndex >= studyCards.length) {
         return false;
       }
-
+      
       const currentCard = studyCards[currentCardIndex];
+      console.log('Reviewing card:', currentCard.id);
       const reviewDate = new Date();
       
       // Update FSRS data
@@ -207,6 +301,24 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
         card.id === currentCard.id ? updatedCard : card
       );
       setEnhancedCards(updatedEnhancedCards);
+
+      // Update local storage
+      // try {
+      //   const raw = await AsyncStorage.getItem(`flashcards_${deckId}`);
+      //   const localCards: FlashCard[] = raw ? JSON.parse(raw) : [];
+      //   const cardIndex = localCards.findIndex(card => card.id === currentCard.id);
+      //   if (cardIndex >= 0) {
+      //     localCards[cardIndex] = updatedCard;
+      //     await AsyncStorage.setItem(`flashcards_${deckId}`, JSON.stringify(localCards));
+      //   }
+      // } catch (storageError) {
+      //   console.error('Error updating local storage after review:', storageError);
+      // }
+
+      // Sync FSRS data to server in background
+      enqueueFSRSUpdateForSync(updatedCard).catch(err => {
+        console.debug('enqueueFSRSUpdateForSync error:', err);
+      });
 
       return true;
     } catch (error) {

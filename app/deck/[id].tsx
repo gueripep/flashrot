@@ -173,7 +173,7 @@ export default function DeckScreen() {
   const handleSaveCard = async (front: string, back: string, useAI = false) => {
     let result;
     if (editingCard) {
-      result = await updateCard(editingCard.id, front, back);
+      result = await updateCard(editingCard.id, front, back, editingCard.stage);
     } else {
       result = await saveCard(front, back);
     }

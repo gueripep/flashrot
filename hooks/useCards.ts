@@ -146,7 +146,6 @@ export function useCards(deckId: string) {
       await processSyncQueue();
       // then fetch authoritative cards from server and merge
       await syncManager.fetchAndMerge();
-      fsrsService.debugAsyncStorage();
     } catch (error) {
       console.error("Error loading cards:", error);
       Alert.alert("Error", "Failed to load cards");
@@ -275,12 +274,13 @@ export function useCards(deckId: string) {
     }
   };
 
-  const updateCard = async (cardId: string, front: string, back: string) => {
+  const updateCard = async (cardId: string, front: string, back: string, stage: Stage, generateDiscussionAndTTS: boolean = false) => {
     try {
       const updatedCards = cards.map((card) =>
         card.id === cardId
           ? {
               ...card,
+              stage,
               final_card: {
                 ...card.final_card,
                 front: front.trim(),
@@ -294,7 +294,9 @@ export function useCards(deckId: string) {
       // try to sync update remotely; enqueue on failure
       let updatedLocal = updatedCards.find((c) => c.id === cardId);
       if (updatedLocal){
-        updatedLocal = await generateCardContent(updatedLocal.final_card.front, updatedLocal.final_card.back, updatedLocal);
+        if (generateDiscussionAndTTS) {
+          updatedLocal = await generateCardContent(updatedLocal.final_card.front, updatedLocal.final_card.back, updatedLocal);
+        }
         enqueueUpdateForSync(updatedLocal).catch((err) =>
           console.debug("enqueueUpdateForSync err", err)
         );
@@ -303,31 +305,6 @@ export function useCards(deckId: string) {
     } catch (error) {
       console.error("Error updating card:", error);
       Alert.alert("Error", "Failed to update card");
-      return false;
-    }
-  };
-
-  const updateCardStage = async (cardId: string, stage: Stage) => {
-    try {
-      // schedules the card a day later
-      const updatedCards = cards.map((card) =>
-        card.id === cardId
-          ? {
-              ...card,
-              stage,
-              fsrs: {
-                ...card.fsrs,
-                due: new Date(Date.now() + 23 * 60 * 60 * 1000),
-              },
-            }
-          : card
-      );
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
-      setCards(updatedCards);
-      return true;
-    } catch (error) {
-      console.error("Error updating card stage:", error);
-      Alert.alert("Error", "Failed to update card stage");
       return false;
     }
   };
@@ -359,7 +336,6 @@ export function useCards(deckId: string) {
     saveCard,
     deleteCard,
     updateCard,
-    updateCardStage,
     getCardById,
     refreshCards: loadCards,
   };

@@ -1,4 +1,3 @@
-import { fsrsService } from '@/services/fsrsService';
 import { createSyncManager } from '@/services/syncService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
@@ -36,7 +35,6 @@ export function useDecks() {
       await processSyncQueue();
       // then fetch authoritative decks from server and merge
       await syncManager.fetchAndMerge();
-      fsrsService.debugAsyncStorage();
       const newStoredDecks = await AsyncStorage.getItem(STORAGE_KEY);
       if (newStoredDecks) {
         setDecks(JSON.parse(newStoredDecks));

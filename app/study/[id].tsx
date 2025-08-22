@@ -46,7 +46,7 @@ export default function StudyScreen() {
   const containerHeight = useSharedValue(0); // Will be set to screen height
 
   const { decks, loading: decksLoading } = useDecks();
-  const { cards, loading: cardsLoading, updateCardStage } = useCards(id || '');
+  const { cards, loading: cardsLoading, updateCard } = useCards(id || '');
 
   // FSRS Integration
   const {
@@ -327,7 +327,7 @@ export default function StudyScreen() {
       // Get timing data for the current audio using local files
       let timingUri: string;
 
-  const isInDiscussionStage = currentCard.stage === Stage.Discussion;
+      const isInDiscussionStage = currentCard.stage === Stage.Discussion;
 
       if (isInDiscussionStage) {
         // In discussion stage, use discussion audio if available
@@ -379,7 +379,6 @@ export default function StudyScreen() {
       clearRevealTimer(); // Clear any active timer
       setReviewStartTime(null);
       mainAudioPlayerRef.current?.stopAudio();
-      fsrsCurrentCard
       nextCard();
 
     }
@@ -388,8 +387,7 @@ export default function StudyScreen() {
   const handleDiscussionNext = async () => {
     if (!fsrsCurrentCard) return;
     try {
-      // Update the card's stage to Learning in storage
-      await updateCardStage(fsrsCurrentCard.id, Stage.Learning);
+      await updateCard(fsrsCurrentCard.id, fsrsCurrentCard.final_card.front, fsrsCurrentCard.final_card.back, Stage.Learning);
       setIsProcessingRating(false);
     } catch (error) {
       console.error('Error transitioning from discussion to learning:', error);

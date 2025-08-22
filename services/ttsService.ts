@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 import { Platform } from "react-native";
 import { fetchApiWithRefresh } from "./authService";
-import { AudioFileRef, fsrsService } from "./fsrsService";
+import { AudioFileRef } from "./fsrsService";
 
 interface TTSRequest {
   text: string;
@@ -180,7 +180,6 @@ class TTSService {
   ): Promise<any> {
     try {
       if (!timingUri) return null;
-      fsrsService.debugAsyncStorage();
       // Check if timing file exists
       if (isLocal) {
         const fileInfo = await FileSystem.getInfoAsync(timingUri);
