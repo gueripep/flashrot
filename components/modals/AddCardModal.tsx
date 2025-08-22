@@ -1,14 +1,24 @@
-import { useThemeColor } from '@/hooks/useThemeColor';
-import { useEffect, useRef, useState } from 'react';
-import { Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
-import { Button, Portal, Switch, Text, TextInput } from 'react-native-paper';
+import { useThemeColor } from "@/hooks/useThemeColor";
+import { aiService } from "@/services/aiService";
+import { useEffect, useRef, useState } from "react";
+import {
+  Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
+import { Button, Portal, Text, TextInput } from "react-native-paper";
 
 interface AddCardModalProps {
   visible: boolean;
   onDismiss: () => void;
-  onSaveCard: (front: string, back: string, useAI?: boolean) => Promise<boolean>;
+  onSaveCard: (front: string, back: string) => Promise<boolean>;
   initialCard?: { front: string; back: string } | null;
-  mode?: 'add' | 'edit';
+  mode?: "add" | "edit";
 }
 
 export default function AddCardModal({
@@ -16,29 +26,30 @@ export default function AddCardModal({
   onDismiss,
   onSaveCard,
   initialCard = null,
-  mode = 'add'
+  mode = "add",
 }: AddCardModalProps) {
-  const textColor = useThemeColor({}, 'text');
-  const backgroundColor = useThemeColor({}, 'background');
-  const primaryColor = useThemeColor({}, 'tint');
-  const overlayColor = useThemeColor({ light: 'rgba(0,0,0,0.2)', dark: 'rgba(255,255,255,0.05)' }, 'text');
+  const textColor = useThemeColor({}, "text");
+  const backgroundColor = useThemeColor({}, "background");
+  const primaryColor = useThemeColor({}, "tint");
+  const overlayColor = useThemeColor(
+    { light: "rgba(0,0,0,0.2)", dark: "rgba(255,255,255,0.05)" },
+    "text"
+  );
   const frontInputRef = useRef<any>(null);
 
-  const [front, setFront] = useState('');
-  const [back, setBack] = useState('');
-  const [useAI, setUseAI] = useState(false);
+  const [front, setFront] = useState("");
+  const [back, setBack] = useState("");
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     if (visible) {
       if (initialCard) {
         setFront(initialCard.front);
         setBack(initialCard.back);
-        setUseAI(false); // Reset AI toggle for existing cards
       } else {
-        setFront('');
-        setBack('');
-        setUseAI(false);
+        setFront("");
+        setBack("");
       }
       // Focus the input after a small delay to ensure modal is fully rendered
       setTimeout(() => {
@@ -53,26 +64,38 @@ export default function AddCardModal({
     onDismiss();
     // Clear state after a small delay to allow modal to close smoothly
     setTimeout(() => {
-      setFront('');
-      setBack('');
-      setUseAI(false);
+      setFront("");
+      setBack("");
       setSaving(false);
     }, 200);
   };
 
   const handleSave = async () => {
     if (!front.trim()) {
-      Alert.alert('Error', 'Please enter the front of the card');
+      Alert.alert("Error", "Please enter the front of the card");
       return;
     }
-    if (!useAI && !back.trim()) {
-      Alert.alert('Error', 'Please enter the back of the card or enable AI generation');
+    if (!back.trim()) {
+      Alert.alert(
+        "Error",
+        "Please enter the back of the card or enable AI generation"
+      );
       return;
     }
 
     setSaving(true);
-    await onSaveCard(front, back, useAI);
+    await onSaveCard(front, back);
     setSaving(false);
+  };
+
+  const handleGenerateAnswer = async () => {
+    setGenerating(true); // <-- Set loading state
+    try {
+      const answer = await aiService.generateAnswer(front);
+      setBack(answer);
+    } finally {
+      setGenerating(false); // <-- Reset loading state
+    }
   };
 
   return (
@@ -84,131 +107,127 @@ export default function AddCardModal({
         transparent={true}
         backdropColor={backgroundColor}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={[styles.modalOverlay, { backgroundColor: overlayColor }]}>
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              style={[styles.inner, { backgroundColor }]}
-            >
-              <View>
-                <Text variant="headlineSmall" style={{ color: textColor, marginBottom: 24 }}>
-                  {mode === 'add' ? 'Add New Card' : 'Edit Card'}
-                </Text>
-                <TextInput
-                  ref={frontInputRef}
-                  label="Front (Question)"
-                  value={front}
-                  onChangeText={setFront}
-                  mode="outlined"
-                  style={[styles.textInput, { marginBottom: 16 }]}
-                  multiline
-                  numberOfLines={3}
-                  theme={{
-                    colors: {
-                      primary: primaryColor,
-                      onSurfaceVariant: textColor,
-                      outline: textColor + '80',
-                    }
-                  }}
-                  placeholder="Enter the question or prompt..."
-                  contentStyle={styles.inputContent}
-                />
+        <View style={[styles.modalOverlay, { backgroundColor: overlayColor }]}>
+          {Platform.OS !== "web" && (
+            <Pressable
+              onPress={Keyboard.dismiss}
+              style={StyleSheet.absoluteFill}
+            ></Pressable>
+          )}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={[styles.inner, { backgroundColor }]}
+          >
+            <View>
+              <Text
+                variant="headlineSmall"
+                style={{ color: textColor, marginBottom: 24 }}
+              >
+                {mode === "add" ? "Add New Card" : "Edit Card"}
+              </Text>
+              <TextInput
+                ref={frontInputRef}
+                label="Front (Question)"
+                value={front}
+                onChangeText={setFront}
+                mode="outlined"
+                style={[styles.textInput, { marginBottom: 16 }]}
+                multiline
+                numberOfLines={3}
+                theme={{
+                  colors: {
+                    primary: primaryColor,
+                    onSurfaceVariant: textColor,
+                    outline: textColor + "80",
+                  },
+                }}
+                placeholder="Enter the question or prompt..."
+                contentStyle={styles.inputContent}
+              />
 
-
-
-                <TextInput
-                  label="Back (Answer)"
-                  value={back}
-                  onChangeText={setBack}
-                  mode="outlined"
-                  style={[styles.textInput, { marginBottom: 24 }]}
-                  multiline
-                  numberOfLines={3}
-                  disabled={useAI || mode === 'edit'}
-                  theme={{
-                    colors: {
-                      primary: primaryColor,
-                      onSurfaceVariant: (useAI || mode === 'edit') ? textColor + '40' : textColor,
-                      outline: (useAI || mode === 'edit') ? textColor + '40' : textColor + '80',
-                    }
-                  }}
-                  placeholder={useAI ? "Answer will be generated by AI..." : mode === 'edit' ? "Edit mode: manual entry only" : "Enter the answer or explanation..."}
-                  contentStyle={styles.inputContent}
-                />
-                <View style={styles.toggleContainer}>
-                  <Text variant="bodyMedium" style={{ color: mode === 'edit' ? textColor + '40' : textColor, flex: 1 }}>
-                    Generate answer with AI
-                  </Text>
-                  <Switch
-                    value={useAI}
-                    onValueChange={(value) => {
-                      setUseAI(value);
-                      if (value) {
-                        setBack(''); // Clear manual answer when enabling AI
-                      }
-                    }}
-                    disabled={mode === 'edit'}
-                    thumbColor={useAI ? primaryColor : textColor + '60'}
-                    trackColor={{ false: textColor + '20', true: primaryColor + '40' }}
-                  />
-                </View>
-              </View>
-              <View style={styles.modalButtons}>
+              <TextInput
+                label="Back (Answer)"
+                value={back}
+                onChangeText={setBack}
+                mode="outlined"
+                style={[styles.textInput, { marginBottom: 24 }]}
+                multiline
+                numberOfLines={3}
+                theme={{
+                  colors: {
+                    primary: primaryColor,
+                    onSurfaceVariant: textColor,
+                    outline: textColor + "80",
+                  },
+                }}
+                placeholder={"Enter the answer or explanation..."}
+                contentStyle={styles.inputContent}
+              />
+              <View style={styles.toggleContainer}>
                 <Button
                   mode="text"
-                  onPress={handleClose}
+                  onPress={handleGenerateAnswer}
                   textColor={primaryColor}
-                  disabled={saving}
+                  disabled={saving || generating} // <-- Disable while generating
+                  loading={generating} // <-- Show spinner
                 >
-                  Cancel
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={handleSave}
-                  buttonColor={primaryColor}
-                  style={{ marginLeft: 12 }}
-                  loading={saving}
-                  disabled={saving}
-                >
-                  {mode === 'add' ? 'Add Card' : 'Save Changes'}
+                  Generate Answer
                 </Button>
               </View>
-            </KeyboardAvoidingView>
-          </View>
-        </TouchableWithoutFeedback>
-
+            </View>
+            <View style={styles.modalButtons}>
+              <Button
+                mode="text"
+                onPress={handleClose}
+                textColor={primaryColor}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                onPress={handleSave}
+                buttonColor={primaryColor}
+                style={{ marginLeft: 12 }}
+                loading={saving}
+                disabled={saving || generating}
+              >
+                {mode === "add" ? "Add Card" : "Save Changes"}
+              </Button>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
-    </Portal >
+    </Portal>
   );
 }
-
-
-
 
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'stretch',
+    justifyContent: "center",
+    alignItems: "center",
   },
   inner: {
     padding: 20,
     margin: 20,
     borderRadius: 10,
+    width: "100%",
+    maxWidth: 600,
   },
   container: {
     flex: 1,
     padding: 20,
-    margin: 20
+    margin: 20,
   },
   toggleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
     marginTop: 16,
   },
   textInput: {
