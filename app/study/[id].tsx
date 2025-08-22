@@ -379,10 +379,9 @@ export default function StudyScreen() {
       clearRevealTimer(); // Clear any active timer
       setReviewStartTime(null);
       mainAudioPlayerRef.current?.stopAudio();
+      fsrsCurrentCard
       nextCard();
-      // loadTimingData(); // Load timing data for the next card
 
-      // there is some other stuff happening for handling next card, but it waits for the videoLoaded useState
     }
   };
 

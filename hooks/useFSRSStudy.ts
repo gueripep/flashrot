@@ -280,6 +280,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
     }
   };
 
+
   /**
    * Get daily progress information
    */

@@ -124,13 +124,7 @@ export function useCards(deckId: string) {
       } catch (e) {
         console.error("Error updating local card after sync:", e);
       }
-    },
-    beforeUpdate: async (item) => {
-      // Custom logic before updating an item
-      console.log("Before update:", item);
-      setLoading(true);
-      // item = await generateCardContent(item.final_card.front, item.final_card.back, item);
-    },
+    }
   });
 
   const enqueueCardForSync = syncManager.enqueueCreate;
@@ -194,14 +188,14 @@ export function useCards(deckId: string) {
     // Generate ai discussion
     const discussion = await getDiscussion(front, back);
     //generate final card
-    const finalCard = await getFinalCard(baseCard, front, back);
+    const final_card = await getFinalCard(baseCard, front, back);
 
     const fsrs = fsrsService.createNewFSRSCard(baseCard.id, deckId);
 
     const card: FlashCard = {
       ...baseCard,
       discussion,
-      final_card: finalCard,
+      final_card,
       fsrs,
       stage: Stage.Discussion,
     };
@@ -253,7 +247,6 @@ export function useCards(deckId: string) {
 
   const deleteCard = async (cardId: string) => {
     try {
-      await AsyncStorage.clear();
       console.log("Deleting card:", cardId);
       // Find the card to get audio file paths
       const cardToDelete = cards.find((card) => card.id === cardId);
@@ -299,11 +292,13 @@ export function useCards(deckId: string) {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
       setCards(updatedCards);
       // try to sync update remotely; enqueue on failure
-      const updatedLocal = updatedCards.find((c) => c.id === cardId);
-      if (updatedLocal)
+      let updatedLocal = updatedCards.find((c) => c.id === cardId);
+      if (updatedLocal){
+        updatedLocal = await generateCardContent(updatedLocal.final_card.front, updatedLocal.final_card.back, updatedLocal);
         enqueueUpdateForSync(updatedLocal).catch((err) =>
           console.debug("enqueueUpdateForSync err", err)
         );
+      }
       return true;
     } catch (error) {
       console.error("Error updating card:", error);

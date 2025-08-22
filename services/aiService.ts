@@ -1,5 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { API_BASE_URL, AUTH_TOKEN_KEY } from "../constants/config";
+import { API_BASE_URL } from "../constants/config";
 import { fetchApiWithRefresh } from "./authService";
 
 interface GenerationOptions {
@@ -16,15 +15,12 @@ class AIService {
     prompt: string,
     options: GenerationOptions = {}
   ): Promise<string> {
-    const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
-    console.log(`Using token: ${token}`);
     const response: any = await fetchApiWithRefresh(
       `${this.baseUrl}/gemini/generate/`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ prompt }), // Change 'request' to 'prompt'
       }
