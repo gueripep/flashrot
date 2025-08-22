@@ -22,6 +22,10 @@ export type SyncManagerOptions<T> = {
   mapServerToLocal?: (serverItem: any, localMatch?: T) => T;
   // optional callback to update in-memory state after writing merged storage
   updateState?: (arr: T[]) => void;
+  // optional hook run before attempting to sync an update to the server.
+  // If this hook throws an error the update will be treated as failed and
+  // the operation will be enqueued for later retry.
+  beforeUpdate?: (item: T) => Promise<void> | void;
 };
 
 const DEFAULT_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -67,6 +71,17 @@ export function createSyncManager<T>(opts: SyncManagerOptions<T>) {
 
   const syncUpdate = async (item: T): Promise<boolean> => {
     try {
+      // Allow callers to run arbitrary code before performing the update.
+      // If the hook throws we treat the update as failed so it will be
+      // enqueued for later retry.
+      if (opts.beforeUpdate) {
+        try {
+          await opts.beforeUpdate(item as T);
+        } catch (hookErr) {
+          console.error('beforeUpdate hook failed, aborting syncUpdate:', hookErr);
+          return false;
+        }
+      }
       const localId = opts.getId(item);
       if (!isUUID(localId)) {
         return await syncCreate(item);

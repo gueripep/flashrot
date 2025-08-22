@@ -1,19 +1,23 @@
-import { aiService } from '@/services/aiService';
-import { Discussion, FinalCard, FlashCard, fsrsService, Stage } from '@/services/fsrsService';
-import { createSyncManager } from '@/services/syncService';
-import { ttsService } from '@/services/ttsService';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
-import { Alert } from 'react-native';
-
-
+import { aiService } from "@/services/aiService";
+import {
+  Discussion,
+  FinalCard,
+  FlashCard,
+  fsrsService,
+  Stage,
+} from "@/services/fsrsService";
+import { createSyncManager } from "@/services/syncService";
+import { ttsService } from "@/services/ttsService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useEffect, useState } from "react";
+import { Alert } from "react-native";
 
 // Function to extract plain text from SSML string
 const extractTextFromSSML = (ssmlString: string): string => {
   // Remove all SSML tags and extract just the text content
   return ssmlString
-    .replace(/<[^>]*>/g, '') // Remove all XML/SSML tags
-    .replace(/\s+/g, ' ') // Replace multiple whitespace with single space
+    .replace(/<[^>]*>/g, "") // Remove all XML/SSML tags
+    .replace(/\s+/g, " ") // Replace multiple whitespace with single space
     .trim(); // Remove leading/trailing whitespace
 };
 
@@ -25,12 +29,14 @@ export function useCards(deckId: string) {
   const SYNC_QUEUE_KEY = `flashcardsSyncQueue_${deckId}`;
 
   function isUUID(id: string) {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      id
+    );
   }
 
   // Sync manager for cards
   const syncManager = createSyncManager<FlashCard>({
-    resourcePath: '/flashcards',
+    resourcePath: "/flashcards",
     storageKey: STORAGE_KEY,
     syncQueueKey: SYNC_QUEUE_KEY,
     getId: (c) => c.id,
@@ -72,7 +78,6 @@ export function useCards(deckId: string) {
       },
     }),
     transformUpdateBody: (c) => ({
-      deck_id: c.deck_id,
       stage: c.stage,
       discussion: {
         ssml_text: c.discussion.ssmlText,
@@ -104,22 +109,27 @@ export function useCards(deckId: string) {
         lapses: c.fsrs.lapses,
         state: c.fsrs.state,
         learning_steps: c.fsrs.learning_steps,
-        audio_id: (c.fsrs as any).audio_id ?? 0,
       },
     }),
     updateLocalAfterSync: async (localId, updates) => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         const localCards: FlashCard[] = raw ? JSON.parse(raw) : [];
-        const idx = localCards.findIndex(c => c.id === localId);
+        const idx = localCards.findIndex((c) => c.id === localId);
         if (idx >= 0) {
           localCards[idx] = { ...localCards[idx], ...updates };
         }
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(localCards));
         setCards(localCards);
       } catch (e) {
-        console.error('Error updating local card after sync:', e);
+        console.error("Error updating local card after sync:", e);
       }
+    },
+    beforeUpdate: async (item) => {
+      // Custom logic before updating an item
+      console.log("Before update:", item);
+      setLoading(true);
+      // item = await generateCardContent(item.final_card.front, item.final_card.back, item);
     },
   });
 
@@ -144,8 +154,8 @@ export function useCards(deckId: string) {
       await syncManager.fetchAndMerge();
       fsrsService.debugAsyncStorage();
     } catch (error) {
-      console.error('Error loading cards:', error);
-      Alert.alert('Error', 'Failed to load cards');
+      console.error("Error loading cards:", error);
+      Alert.alert("Error", "Failed to load cards");
     } finally {
       setLoading(false);
     }
@@ -158,38 +168,51 @@ export function useCards(deckId: string) {
         created_at: new Date().toISOString(),
         deck_id: deckId,
       };
-      // Generate ai discussion
-      const discussion = await getDiscussion(front, back);
-      //generate final card
-      const finalCard = await getFinalCard(baseCard, front, back);
-
-      const fsrs = fsrsService.createNewFSRSCard(baseCard.id, deckId);
-
-      const card: FlashCard = {
-        ...baseCard,
-        discussion,
-        final_card: finalCard,
-        fsrs,
-        stage: Stage.Discussion,
-      };
+      const card = await generateCardContent(front, back, baseCard);
       // Only save the card after all processing is complete
       const updatedCards = [...cards, card];
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
       setCards(updatedCards);
       // Try to sync to server in background; if it fails we enqueue for retry
-      enqueueCardForSync(card).catch(err => {
+      enqueueCardForSync(card).catch((err) => {
         // already handled in enqueue; swallow here but log for debug
-        console.debug('enqueueCardForSync error:', err);
+        console.debug("enqueueCardForSync error:", err);
       });
       return true;
     } catch (error) {
-      console.error('Error saving card:', error);
-      Alert.alert('Error', 'Failed to save card');
+      console.error("Error saving card:", error);
+      Alert.alert("Error", "Failed to save card");
       return false;
     }
   };
 
-  const getDiscussion = async (front: string, back: string): Promise<Discussion> => {
+  const generateCardContent = async (
+    front: string,
+    back: string,
+    baseCard: any
+  ): Promise<FlashCard> => {
+    // Generate ai discussion
+    const discussion = await getDiscussion(front, back);
+    //generate final card
+    const finalCard = await getFinalCard(baseCard, front, back);
+
+    const fsrs = fsrsService.createNewFSRSCard(baseCard.id, deckId);
+
+    const card: FlashCard = {
+      ...baseCard,
+      discussion,
+      final_card: finalCard,
+      fsrs,
+      stage: Stage.Discussion,
+    };
+
+    return card;
+  };
+
+  const getDiscussion = async (
+    front: string,
+    back: string
+  ): Promise<Discussion> => {
     try {
       const discussionSsml = await aiService.generateCourse(front, back);
       const discussionText = extractTextFromSSML(discussionSsml);
@@ -199,16 +222,20 @@ export function useCards(deckId: string) {
       const discussion: Discussion = {
         ssmlText: discussionSsml,
         text: discussionText,
-        audio: audioData
+        audio: audioData,
       };
-      console.log('Generated discussion:', discussion);
+      console.log("Generated discussion:", discussion);
       return discussion;
     } catch (error) {
-      throw new Error('Failed to generate discussion');
+      throw new Error("Failed to generate discussion");
     }
   };
 
-  const getFinalCard = async (baseCard: any, front: string, back: string): Promise<FinalCard> => {
+  const getFinalCard = async (
+    baseCard: any,
+    front: string,
+    back: string
+  ): Promise<FinalCard> => {
     const audioData = await ttsService.generateCardAudio(
       baseCard.id,
       front,
@@ -219,7 +246,7 @@ export function useCards(deckId: string) {
       front: front.trim(),
       back: back.trim(),
       question_audio: audioData.questionAudio,
-      answer_audio: audioData.answerAudio
+      answer_audio: audioData.answerAudio,
     };
     return card;
   };
@@ -227,9 +254,9 @@ export function useCards(deckId: string) {
   const deleteCard = async (cardId: string) => {
     try {
       await AsyncStorage.clear();
-      console.log('Deleting card:', cardId);
+      console.log("Deleting card:", cardId);
       // Find the card to get audio file paths
-      const cardToDelete = cards.find(card => card.id === cardId);
+      const cardToDelete = cards.find((card) => card.id === cardId);
 
       // Delete associated audio files
       await ttsService.deleteCardAudio(
@@ -238,37 +265,49 @@ export function useCards(deckId: string) {
         cardToDelete?.final_card.answer_audio.local_files?.audio_file
       );
 
-      const updatedCards = cards.filter(card => card.id !== cardId);
+      const updatedCards = cards.filter((card) => card.id !== cardId);
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
       setCards(updatedCards);
       // If it is a uuid it means the card was saved on server
       if (isUUID(cardId)) {
-        enqueueDeleteForSync(cardId).catch(err => console.debug('enqueueDeleteForSync err', err));
+        enqueueDeleteForSync(cardId).catch((err) =>
+          console.debug("enqueueDeleteForSync err", err)
+        );
       }
       return true;
     } catch (error) {
-      console.error('Error deleting card:', error);
-      Alert.alert('Error', 'Failed to delete card');
+      console.error("Error deleting card:", error);
+      Alert.alert("Error", "Failed to delete card");
       return false;
     }
   };
 
   const updateCard = async (cardId: string, front: string, back: string) => {
     try {
-      const updatedCards = cards.map(card =>
+      const updatedCards = cards.map((card) =>
         card.id === cardId
-          ? { ...card, final_card: { ...card.final_card, front: front.trim(), back: back.trim() } }
+          ? {
+              ...card,
+              final_card: {
+                ...card.final_card,
+                front: front.trim(),
+                back: back.trim(),
+              },
+            }
           : card
       );
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
       setCards(updatedCards);
       // try to sync update remotely; enqueue on failure
-      const updatedLocal = updatedCards.find(c => c.id === cardId);
-      if (updatedLocal) enqueueUpdateForSync(updatedLocal).catch(err => console.debug('enqueueUpdateForSync err', err));
+      const updatedLocal = updatedCards.find((c) => c.id === cardId);
+      if (updatedLocal)
+        enqueueUpdateForSync(updatedLocal).catch((err) =>
+          console.debug("enqueueUpdateForSync err", err)
+        );
       return true;
     } catch (error) {
-      console.error('Error updating card:', error);
-      Alert.alert('Error', 'Failed to update card');
+      console.error("Error updating card:", error);
+      Alert.alert("Error", "Failed to update card");
       return false;
     }
   };
@@ -276,23 +315,30 @@ export function useCards(deckId: string) {
   const updateCardStage = async (cardId: string, stage: Stage) => {
     try {
       // schedules the card a day later
-      const updatedCards = cards.map(card =>
+      const updatedCards = cards.map((card) =>
         card.id === cardId
-          ? { ...card, stage, fsrs: { ...card.fsrs, due: new Date(Date.now() + 23 * 60 * 60 * 1000) } }
+          ? {
+              ...card,
+              stage,
+              fsrs: {
+                ...card.fsrs,
+                due: new Date(Date.now() + 23 * 60 * 60 * 1000),
+              },
+            }
           : card
       );
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
       setCards(updatedCards);
       return true;
     } catch (error) {
-      console.error('Error updating card stage:', error);
-      Alert.alert('Error', 'Failed to update card stage');
+      console.error("Error updating card stage:", error);
+      Alert.alert("Error", "Failed to update card stage");
       return false;
     }
   };
 
   const getCardById = (cardId: string): FlashCard | undefined => {
-    return cards.find(card => card.id === cardId);
+    return cards.find((card) => card.id === cardId);
   };
 
   // Load cards on hook initialization
