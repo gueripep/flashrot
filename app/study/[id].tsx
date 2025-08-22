@@ -69,8 +69,24 @@ export default function StudyScreen() {
 
   // Cleanup timer on unmount
   useEffect(() => {
+    // Stop audio when the screen is blurred or the component unmounts
+    const stopAllAudio = () => {
+      try {
+        mainAudioPlayerRef.current?.stopAudio();
+        tickerAudioPlayerRef.current?.stopAudio();
+      } catch (e) {
+        console.warn('Error stopping audio on cleanup', e);
+      }
+    };
+
+    const blurUnsubscribe = (navigation as any)?.addListener?.('blur', () => {
+      stopAllAudio();
+    });
+
     return () => {
       clearRevealTimer();
+      stopAllAudio();
+      if (typeof blurUnsubscribe === 'function') blurUnsubscribe();
     };
   }, []);
 
@@ -351,13 +367,14 @@ export default function StudyScreen() {
 
   // Common function to handle moving to the next card or ending the study session
   const handleNextCardOrComplete = () => {
+    mainAudioPlayerRef.current?.stopAudio();
+    setAudioPosition(0);
     if (isLastCard) {
       setStudyComplete(true);
     } else {
       console.log('🎭 StudyScreen: Moving to next card');
       // Reset state for next card
       setIsFlipped(false);
-      setAudioPosition(0);
       setIsLiked(false); // Reset like state for next card
       clearRevealTimer(); // Clear any active timer
       setReviewStartTime(null);
