@@ -49,7 +49,6 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
   const syncFSRSUpdate = async (card: FlashCard): Promise<boolean> => {
     try {
       const body = {
-        flashcard_id: card.id,
         due: card.fsrs.due,
         stability: card.fsrs.stability,
         difficulty: card.fsrs.difficulty,
@@ -62,7 +61,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       };
 
       const res = await fetchApiWithRefresh(`${API_BASE_URL}/flashcards/${card.id}/fsrs`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
@@ -450,7 +449,9 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
     
     // Debug Tools (only expose in development)
     debug: __DEV__ ? {
-      resetAllCards: () => fsrsService.debugResetAllCards(),
+      resetAllCards: () => { 
+        return fsrsService.debugResetAllCards(); 
+      },
       resetCards: (cardIds: string[]) => fsrsService.debugResetCards(cardIds),
       timeTravel: (days: number) => fsrsService.debugTimeTravel(days),
       setCardDueDate: (cardId: string, dueDate: Date) => fsrsService.debugSetCardDueDate(cardId, dueDate),

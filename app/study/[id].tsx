@@ -357,6 +357,7 @@ export default function StudyScreen() {
 
     setIsFlipped(!isFlipped);
     setAudioPosition(0);
+    console.log("Card flipped:");
     // Don't force stop audio playing state - let AudioPlayer handle autoplay
 
     if (!isFlipped) {

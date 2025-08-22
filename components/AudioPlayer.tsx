@@ -106,7 +106,6 @@ const AudioPlayer = forwardRef(function AudioPlayer(
 
   useEffect(() => {
     try {
-      console.log("test");
       if (player && typeof player === 'object' && 'playing' in player) {
         // Test if player is still accessible before reading playing state
         try {
