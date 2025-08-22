@@ -151,7 +151,7 @@ export function useCards(deckId: string) {
     }
   };
 
-  const saveCard = async (front: string, back: string, useAI = false) => {
+  const saveCard = async (front: string, back: string) => {
     try {
       const baseCard = {
         id: Date.now().toString(),
@@ -161,7 +161,7 @@ export function useCards(deckId: string) {
       // Generate ai discussion
       const discussion = await getDiscussion(front, back);
       //generate final card
-      const finalCard = await getFinalCard(baseCard, front, back, useAI);
+      const finalCard = await getFinalCard(baseCard, front, back);
 
       const fsrs = fsrsService.createNewFSRSCard(baseCard.id, deckId);
 
@@ -208,28 +208,16 @@ export function useCards(deckId: string) {
     }
   };
 
-  const getFinalCard = async (baseCard: any, front: string, back: string, useAI: boolean): Promise<FinalCard> => {
-    // Generate AI answer if requested
-    if (useAI) {
-      const aiAnswer = await aiService.generateAnswer(front);
-      if (aiAnswer) {
-        back = aiAnswer;
-      } else {
-        throw new Error('AI failed to generate answer');
-      }
-
-    }
+  const getFinalCard = async (baseCard: any, front: string, back: string): Promise<FinalCard> => {
     const audioData = await ttsService.generateCardAudio(
       baseCard.id,
       front,
       back
     );
 
-
-    console.log("Generated final card")
     const card: FinalCard = {
       front: front.trim(),
-      back: useAI ? '' : back.trim(),
+      back: back.trim(),
       question_audio: audioData.questionAudio,
       answer_audio: audioData.answerAudio
     };
