@@ -135,22 +135,27 @@ export function useCards(deckId: string) {
   const loadCards = async () => {
     try {
       setLoading(true);
-      const storedCards = await AsyncStorage.getItem(STORAGE_KEY);
-      if (storedCards) {
-        const parsedCards: FlashCard[] = JSON.parse(storedCards);
-        setCards(parsedCards);
-      } else {
-        setCards([]);
-      }
+      await loadLocalCards();
       // after loading local cards, try to flush local changes to server
       await processSyncQueue();
       // then fetch authoritative cards from server and merge
       await syncManager.fetchAndMerge();
+      // finally reload local cards to reflect any changes
+      await loadLocalCards();
     } catch (error) {
       console.error("Error loading cards:", error);
       Alert.alert("Error", "Failed to load cards");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadLocalCards = async () => {
+    const storedCards = await AsyncStorage.getItem(STORAGE_KEY);
+    if (storedCards) {
+      const parsedCards: FlashCard[] = JSON.parse(storedCards);
+      const deckCards = parsedCards.filter((c) => c.deck_id === deckId);
+      setCards(deckCards);
     }
   };
 
@@ -279,21 +284,21 @@ export function useCards(deckId: string) {
       const updatedCards = cards.map((card) =>
         card.id === cardId
           ? {
-              ...card,
-              stage,
-              final_card: {
-                ...card.final_card,
-                front: front.trim(),
-                back: back.trim(),
-              },
-            }
+            ...card,
+            stage,
+            final_card: {
+              ...card.final_card,
+              front: front.trim(),
+              back: back.trim(),
+            },
+          }
           : card
       );
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCards));
       setCards(updatedCards);
       // try to sync update remotely; enqueue on failure
       let updatedLocal = updatedCards.find((c) => c.id === cardId);
-      if (updatedLocal){
+      if (updatedLocal) {
         if (generateDiscussionAndTTS) {
           updatedLocal = await generateCardContent(updatedLocal.final_card.front, updatedLocal.final_card.back, updatedLocal);
         }

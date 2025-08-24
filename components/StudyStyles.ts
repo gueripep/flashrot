@@ -53,24 +53,20 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  progressContainer: {
-    marginBottom: 24,
-  },
   progressContainerFixed: {
     position: 'absolute',
-    top: 0,
+    top: 32,
     left: 0,
     right: 0,
     zIndex: 1,
     backgroundColor: 'transparent',
+    height: 10,
+    display: 'flex',
   },
   progressBar: {
-    position: 'absolute',
-    alignSelf: 'center',
-    marginTop: 48,
-    height: 8,
     borderRadius: 4,
-    width: '90%',
+    flex: 1,
+    height: 8
   },
   fsrsContainer: {
     marginBottom: 16,

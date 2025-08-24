@@ -60,7 +60,7 @@ export interface AudioFileRef {
     signed_url_files: TimedAudioFiles;
 }
 
-export interface TimedAudioFiles{
+export interface TimedAudioFiles {
     audio_file: string;
     timing_file: string;
 }
@@ -683,33 +683,32 @@ class FSRSService {
     /**
      * Reset all FSRS data for all cards (WARNING: This will delete all progress!)
      */
-    async debugResetAllCards(): Promise<void> {
+    async debugResetAllCards(deckId: string): Promise<void> {
         try {
             // Get all deck keys and reset FSRS data in each deck
-            const allKeys = await AsyncStorage.getAllKeys();
-            const deckKeys = allKeys.filter(key => key.startsWith('flashcards_'));
-
-            for (const key of deckKeys) {
-                const deckId = key.replace('flashcards_', '');
-                const cards = await this.loadCardsFromDeck(deckId);
-
-                // Reset FSRS data for each card
-                const resetCards = cards.map(card => ({
-                    ...card,
-                    fsrs: this.createNewFSRSCard(card.id, card.deck_id),
-                    stage: Stage.Discussion
-                }));
-
-                await this.saveCardsToDeck(deckId, resetCards);
-            }
-
+            const allCards = await this.getAllCards(deckId);
+            console.log(`🔧 DEBUG: Resetting FSRS data for ${allCards.length} cards across all decks`);
+            // Reset FSRS data for each card and save on localstorage
+            const updatedCards = allCards.map(card => ({
+                ...card,
+                fsrs: this.createNewFSRSCard(card.id, card.deck_id),
+                stage: Stage.Discussion
+            }));
+            const deckStorageKey = `flashcards_${deckId}`;
             await AsyncStorage.removeItem(this.DAILY_PROGRESS_KEY);
             await AsyncStorage.removeItem(this.STUDY_SESSIONS_KEY);
-            console.log('🔧 DEBUG: All FSRS data has been reset!');
+            await AsyncStorage.setItem(deckStorageKey, JSON.stringify(updatedCards));
         } catch (error) {
             console.error('Error resetting FSRS data:', error);
             throw error;
         }
+    }
+
+    public async getAllCards(deckId: string): Promise<FlashCard[]> {
+        const allCards: FlashCard[] = [];
+        const cards = await this.loadCardsFromDeck(deckId);
+        allCards.push(...cards);
+        return allCards;
     }
 
     /**

@@ -67,7 +67,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       });
 
       if (!res.ok) throw new Error(`Server returned ${res.status}`);
-      
+
       // Remove from sync queue on success
       await removeFromSyncQueue<FlashCard>(FSRS_SYNC_QUEUE_KEY, card.id);
       return true;
@@ -146,11 +146,11 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
   // Setup periodic FSRS sync processing
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
-    
+
     if (deckId) {
       // Process any pending FSRS syncs when hook initializes
       processFSRSSyncQueue();
-      
+
       // Set up periodic retry every 30 seconds while mounted
       interval = setInterval(() => {
         processFSRSSyncQueue();
@@ -167,7 +167,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
    */
   const startStudySession = async (options: StudyModeOptions = { mode: 'review' }) => {
     const now = Date.now();
-    
+
     // Debounce: prevent calls within 1 second of each other
     if (now - lastStartAttempt.current < 1000) {
       console.log('Debouncing start session call');
@@ -193,9 +193,9 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       console.log('Starting study session with mode:', options.mode);
       console.log('Enhanced cards available:', enhancedCards.length);
       console.log('All cards available:', allCards.length);
-      
+
       let cardsToStudy: FlashCard[] = [];
-      
+
       switch (options.mode) {
         case 'review':
           cardsToStudy = await fsrsService.getCardsForReview(deckId, allCards);
@@ -215,14 +215,14 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       if (options.maxCards && cardsToStudy.length > options.maxCards) {
         cardsToStudy = cardsToStudy.slice(0, options.maxCards);
       }
-      
+
       console.log('Cards to study:', cardsToStudy.length);
-      
+
       if (cardsToStudy.length === 0) {
         Alert.alert(
-          'No Cards Available', 
-          options.mode === 'review' 
-            ? 'No cards are due for review at this time.' 
+          'No Cards Available',
+          options.mode === 'review'
+            ? 'No cards are due for review at this time.'
             : 'No cards available for study.'
         );
         return false;
@@ -233,7 +233,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       setStudyCards(cardsToStudy);
       setCurrentCardIndex(0);
       setIsStudyActive(true);
-      
+
       return true;
     } catch (error) {
       console.error('Error starting study session:', error);
@@ -253,13 +253,13 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
         const session = await fsrsService.endStudySession(sessionId);
         console.log('Study session ended:', session);
       }
-      
+
       setIsStudyActive(false);
       setSessionId(null);
       setStudyCards([]);
       setCurrentCardIndex(0);
       setIsStartingSession(false); // Reset the starting flag
-      
+
       // Reload enhanced cards and stats
       await loadEnhancedCards();
       await loadStudyStats();
@@ -276,16 +276,16 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       if (!isStudyActive || currentCardIndex >= studyCards.length) {
         return false;
       }
-      
+
       const currentCard = studyCards[currentCardIndex];
       console.log('Reviewing card:', currentCard.id);
       const reviewDate = new Date();
-      
+
       // Update FSRS data
       const updatedFSRSData = await fsrsService.reviewCard(
-        currentCard.id, 
-        rating, 
-        reviewDate, 
+        currentCard.id,
+        rating,
+        reviewDate,
         timeTaken
       );
 
@@ -296,23 +296,11 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       setStudyCards(updatedStudyCards);
 
       // Update enhanced cards
-      const updatedEnhancedCards = enhancedCards.map(card => 
+      const updatedEnhancedCards = enhancedCards.map(card =>
         card.id === currentCard.id ? updatedCard : card
       );
       setEnhancedCards(updatedEnhancedCards);
 
-      // Update local storage
-      // try {
-      //   const raw = await AsyncStorage.getItem(`flashcards_${deckId}`);
-      //   const localCards: FlashCard[] = raw ? JSON.parse(raw) : [];
-      //   const cardIndex = localCards.findIndex(card => card.id === currentCard.id);
-      //   if (cardIndex >= 0) {
-      //     localCards[cardIndex] = updatedCard;
-      //     await AsyncStorage.setItem(`flashcards_${deckId}`, JSON.stringify(localCards));
-      //   }
-      // } catch (storageError) {
-      //   console.error('Error updating local storage after review:', storageError);
-      // }
 
       // Sync FSRS data to server in background
       enqueueFSRSUpdateForSync(updatedCard).catch(err => {
@@ -356,7 +344,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
     try {
       const targetCardId = cardId || studyCards[currentCardIndex]?.id;
       if (!targetCardId) return null;
-      
+
       return await fsrsService.getReviewOptions(targetCardId);
     } catch (error) {
       console.error('Error getting review options:', error);
@@ -439,18 +427,26 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
     reviewCard,
     nextCard,
     previousCard,
-    
+
     // Utilities
     getReviewOptions,
     getTimeUntilDue,
     getRatingLabels,
     hasCardsForReview,
     getDailyProgressInfo,
-    
+
     // Debug Tools (only expose in development)
     debug: __DEV__ ? {
-      resetAllCards: () => { 
-        return fsrsService.debugResetAllCards(); 
+      resetAllCards: async () => {
+        await fsrsService.debugResetAllCards(deckId);
+        const cards = await fsrsService.getAllCards(deckId);
+
+        for (const card of cards) {
+          enqueueFSRSUpdateForSync(card).catch(err => {
+            console.debug('enqueueFSRSUpdateForSync error:', err);
+          });
+        }
+        
       },
       resetCards: (cardIds: string[]) => fsrsService.debugResetCards(cardIds),
       timeTravel: (days: number) => fsrsService.debugTimeTravel(days),
@@ -461,17 +457,17 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
       exportData: () => fsrsService.debugExportData(),
       importData: (jsonData: string) => fsrsService.debugImportData(jsonData)
     } : undefined,
-    
+
     // Refresh
     refreshData: () => {
       const now = Date.now();
-      
+
       // Debounce: prevent calls within 1 second of each other
       if (now - lastRefreshAttempt.current < 1000) {
         return;
       }
       lastRefreshAttempt.current = now;
-      
+
       console.log('Refreshing FSRS data...');
       if (deckId && allCards.length > 0) {
         loadEnhancedCards();

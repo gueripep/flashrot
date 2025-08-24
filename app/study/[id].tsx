@@ -2,7 +2,7 @@ import { AntDesign } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { TouchableOpacity, View } from 'react-native';
+import { Platform, TouchableOpacity, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { Button, IconButton, ProgressBar, Text } from 'react-native-paper';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -111,7 +111,6 @@ export default function StudyScreen() {
   const [audioPosition, setAudioPosition] = useState(0);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [timingData, setTimingData] = useState<any>(null);
-  const [showRatingButtons, setShowRatingButtons] = useState(false);
   //used for calculating the amount of time spent on a card and giving to fsrs
   const [reviewStartTime, setReviewStartTime] = useState<Date | null>(null);
   const [isProcessingRating, setIsProcessingRating] = useState(false);
@@ -127,7 +126,7 @@ export default function StudyScreen() {
 
   // TikTok-style swipe gesture for rating based on like state
   const handleSwipeUp = () => {
-    console.log('👆 StudyScreen: handleSwipeUp called', { isFlipped, showRatingButtons, isDiscussionStage, isProcessingRating, isLiked });
+    console.log('👆 StudyScreen: handleSwipeUp called', { isFlipped, isDiscussionStage, isProcessingRating, isLiked });
     try {
       setIsProcessingRating(true);
 
@@ -160,6 +159,7 @@ export default function StudyScreen() {
 
   // Start timer countdown after question audio finishes
   const startRevealTimer = () => {
+    setTimingData(null);
     console.log("timer started");
     if (isTimerActive || isFlipped) return;
 
@@ -260,7 +260,7 @@ export default function StudyScreen() {
       // Clear any active timer
       clearRevealTimer();
       loadTimingData();
-      mainAudioPlayerRef.current?.playAudio();
+      // mainAudioPlayerRef.current?.playAudio();
       console.log('✅ StudyScreen: Animation values reset successfully');
     } catch (error) {
       console.error('❌ StudyScreen: Error resetting animation values', error);
@@ -273,24 +273,6 @@ export default function StudyScreen() {
       { translateY: translateY.value },
     ],
   }));
-
-  // No individual video animations needed - they move with the container
-
-  // Set the header title dynamically
-  useLayoutEffect(() => {
-    if (currentDeck) {
-      navigation.setOptions({
-        title: `Study: ${currentDeck.name}`,
-        headerLeft: () => (
-          <IconButton
-            icon="close"
-            iconColor={textColor}
-            onPress={() => router.back()}
-          />
-        ),
-      });
-    }
-  }, [currentDeck, navigation, textColor, router]);
 
   useEffect(() => {
     if (id && decks.length > 0) {
@@ -354,21 +336,23 @@ export default function StudyScreen() {
     // Clear any active timer
     clearRevealTimer();
     tickerAudioPlayerRef.current?.stopAudio();
-
-    setIsFlipped(!isFlipped);
+    
+    
     setAudioPosition(0);
-    console.log("Card flipped:");
-    // Don't force stop audio playing state - let AudioPlayer handle autoplay
-
+    setTimingData(null);
+    setIsFlipped(!isFlipped);
     if (!isFlipped) {
-      setShowRatingButtons(true);
       setReviewStartTime(new Date());
     }
   };
 
+  useEffect(() => {
+    loadTimingData();
+  }, [isFlipped]);
+
   // Common function to handle moving to the next card or ending the study session
   const handleNextCardOrComplete = () => {
-    mainAudioPlayerRef.current?.stopAudio();
+    // mainAudioPlayerRef.current?.stopAudio();
     setAudioPosition(0);
     if (isLastCard) {
       setStudyComplete(true);
@@ -379,7 +363,6 @@ export default function StudyScreen() {
       setIsLiked(false); // Reset like state for next card
       clearRevealTimer(); // Clear any active timer
       setReviewStartTime(null);
-      mainAudioPlayerRef.current?.stopAudio();
       nextCard();
 
     }
@@ -463,8 +446,17 @@ export default function StudyScreen() {
         }}
       >
         {/* Progress Bar - fixed position */}
-        <View style={styles.progressContainerFixed}>
-          <ProgressBar progress={fsrsProgress} color={tintColor} style={styles.progressBar} />
+        <View style={[styles.progressContainerFixed, { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }]}>
+          <ProgressBar progress={fsrsProgress} color={tintColor} style={[styles.progressBar]} />
+          {Platform.OS === 'web' && (
+            <IconButton
+              icon="close"
+              iconColor={textColor}
+              onPress={() => router.back()}
+              size={30}
+              style={{ flexShrink: 0 }}
+            />
+          )}
         </View>
 
         {/* Double-height animated container for TikTok-style scrolling */}
@@ -477,11 +469,14 @@ export default function StudyScreen() {
               onVideoLoaded={() => setVideoLoaded(true)}
               ref={backgroundVideoRef}
             />
-            <AudioPlayer
-              audioUri={require('@/assets/audio/timer-tick.mp3')}
-              autoPlay={false}
-              ref={tickerAudioPlayerRef}>
-            </AudioPlayer>
+
+            <View style={{ display: 'none' }}>
+              <AudioPlayer
+                audioUri={require('@/assets/audio/timer-tick.mp3')}
+                autoPlay={false}
+                ref={tickerAudioPlayerRef}>
+              </AudioPlayer>
+            </View>
 
 
             <GestureDetector gesture={swipeGesture}>
@@ -515,7 +510,7 @@ export default function StudyScreen() {
                         <View style={[styles.audioContainer, { display: 'none' }]}>
                           <AudioPlayer
                             audioUri={audioUri}
-                            autoPlay={false}
+                            autoPlay={true}
                             size={24}
                             onPositionChange={setAudioPosition}
                             onPlayStateChange={setIsAudioPlaying}

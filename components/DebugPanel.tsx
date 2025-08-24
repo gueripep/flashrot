@@ -39,28 +39,12 @@ export default function DebugPanel({ deckId, allCards, onRefresh }: DebugPanelPr
     }
   };
 
-  const handleResetAll = () => {
-    Alert.alert(
-      'WARNING',
-      'This will delete ALL FSRS progress for ALL cards. Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'DELETE ALL', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await debug.resetAllCards();
-              refreshData();
-              onRefresh?.();
-              Alert.alert('Success', 'All FSRS data has been reset!');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to reset data');
-            }
-          }
-        }
-      ]
-    );
+  const handleResetAll = async () => {
+
+    await debug.resetAllCards();
+    refreshData();
+    onRefresh?.();
+
   };
 
   const handleMakeAllDue = async () => {

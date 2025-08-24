@@ -79,6 +79,7 @@ export default function DeckScreen() {
     if (id && decks.length > 0) {
       const deck = decks.find((d) => d.id === id);
       if (deck) {
+        // const card = cards.filter((c) => c.deck_id === deck.id);
         setCurrentDeck({
           ...deck,
           cards: cards,
@@ -87,13 +88,6 @@ export default function DeckScreen() {
       }
     }
   }, [id, decks, cards]);
-
-  // Update deck card count when cards change
-  useEffect(() => {
-    if (currentDeck && cards.length !== currentDeck.cardCount) {
-      updateDeck(currentDeck.id, { cardCount: cards.length });
-    }
-  }, [cards.length, currentDeck, updateDeck]);
 
   // Check for cards due for review
   useEffect(() => {
