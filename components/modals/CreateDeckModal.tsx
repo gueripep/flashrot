@@ -1,19 +1,13 @@
+import { DeckCreateBody } from '@/hooks/useDecks';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { Button, Modal, Portal, Text, TextInput } from 'react-native-paper';
-
-interface Deck {
-  id: string;
-  name: string;
-  cardCount: number;
-  createdAt: string;
-}
 
 interface CreateDeckModalProps {
   visible: boolean;
   onDismiss: () => void;
-  onCreateDeck: (deck: Deck) => void;
+  onCreateDeck: (deck: DeckCreateBody) => Promise<void>;
 }
 
 export default function CreateDeckModal({ visible, onDismiss, onCreateDeck }: CreateDeckModalProps) {
@@ -29,11 +23,8 @@ export default function CreateDeckModal({ visible, onDismiss, onCreateDeck }: Cr
 
   const handleCreate = () => {
     if (deckName.trim()) {
-      const newDeck: Deck = {
-        id: Date.now().toString(),
+      const newDeck: DeckCreateBody = {
         name: deckName.trim(),
-        cardCount: 0,
-        createdAt: new Date().toISOString(),
       };
       onCreateDeck(newDeck);
       handleClose();
@@ -47,45 +38,54 @@ export default function CreateDeckModal({ visible, onDismiss, onCreateDeck }: Cr
       <Modal
         visible={visible}
         onDismiss={handleClose}
+        style={styles.modal}
+        contentContainerStyle={[styles.modalContent, { backgroundColor }]}
       >
+        {/* <View style={styles.modalOverlay}> */}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={[styles.modalOverlay, { backgroundColor }]}
+          >
+            <Text variant="headlineSmall" style={{ color: textColor, marginBottom: 24 }}>
+              Add New Deck
+            </Text>
+            <TextInput
+              label="Deck name"
+              value={deckName}
+              onChangeText={setDeckName}
+              mode="outlined"
+              style={{ marginBottom: 24 }}
+              autoFocus={true}
+              onSubmitEditing={handleCreate}
+              theme={{
+                colors: {
+                  primary: primaryColor,
+                  onSurfaceVariant: textColor,
+                  outline: textColor + '80',
+                }
+              }}
+            />
+            <View style={styles.modalButtons}>
+              <Button
+                mode="text"
+                onPress={handleClose}
+                textColor={primaryColor}
+              >
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                onPress={handleCreate}
+                buttonColor={primaryColor}
+                style={{ marginLeft: 12 }}
+              >
+                Create
+              </Button>
+            </View>
+          </KeyboardAvoidingView>
 
-        <View style={[styles.modalContent, { backgroundColor }]}>
-          <Text variant="headlineSmall" style={{ color: textColor, marginBottom: 24 }}>
-            Add New Deck
-          </Text>
-          <TextInput
-            label="Deck name"
-            value={deckName}
-            onChangeText={setDeckName}
-            mode="outlined"
-            style={{ marginBottom: 24 }}
-            autoFocus={true}
-            theme={{
-              colors: {
-                primary: primaryColor,
-                onSurfaceVariant: textColor,
-                outline: textColor + '80',
-              }
-            }}
-          />
-          <View style={styles.modalButtons}>
-            <Button
-              mode="text"
-              onPress={handleClose}
-              textColor={primaryColor}
-            >
-              Cancel
-            </Button>
-            <Button
-              mode="contained"
-              onPress={handleCreate}
-              buttonColor={primaryColor}
-              style={{ marginLeft: 12 }}
-            >
-              Create
-            </Button>
-          </View>
-        </View>
+        {/* </View> */}
+
       </Modal>
     </Portal>
   );
@@ -93,21 +93,23 @@ export default function CreateDeckModal({ visible, onDismiss, onCreateDeck }: Cr
 
 const styles = StyleSheet.create({
   modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    padding: 24,
-    margin: 20,
-    borderRadius: 12,
+    alignItems: "stretch",
   },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
     marginTop: 8,
+  },
+  modal: {
+    margin: 20,
+  },
+  modalContent: {
+    padding: 20,
+    borderRadius: 10,
+    width: "100%",
+    maxWidth: 600,
+    //center itself
+    alignSelf: "center",
   },
 });

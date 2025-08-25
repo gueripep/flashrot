@@ -1,3 +1,4 @@
+import { Deck } from '@/hooks/useDecks';
 import { useSwipeGesture } from '@/hooks/useSwipeGesture';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { AntDesign } from '@expo/vector-icons';
@@ -8,13 +9,6 @@ import { Card, Text } from 'react-native-paper';
 import Animated from 'react-native-reanimated';
 import DeleteConfirmationModal from './modals/DeleteConfirmationModal';
 
-interface Deck {
-    id: string;
-    name: string;
-    cardCount: number;
-    createdAt: string;
-}
-
 interface DeckCardProps {
     deck: Deck;
     onPress?: () => void;
@@ -23,7 +17,6 @@ interface DeckCardProps {
 
 export default function DeckCard({ deck, onPress, onDelete }: DeckCardProps) {
     const textColor = useThemeColor({}, 'text');
-    const backgroundColor = useThemeColor({}, 'background');
     const cardBackgroundColor = useThemeColor({}, 'cardBackground');
     const [showDeleteModal, setShowDeleteModal] = useState(false);
 
@@ -93,7 +86,7 @@ export default function DeckCard({ deck, onPress, onDelete }: DeckCardProps) {
                                     {deck.name}
                                 </Text>
                                 <Text variant="bodySmall" style={{ color: textColor + 'CC' }}>
-                                    {deck.cardCount} cards • Created {new Date(deck.createdAt).toLocaleDateString()}
+                                    {deck.card_count} cards • Created {new Date(deck.created_at).toLocaleDateString()}
                                 </Text>
                             </Card.Content>
                         </Card>
@@ -116,6 +109,7 @@ const styles = StyleSheet.create({
         marginBottom: 12,
         position: 'relative',
         width: '100%',
+
     },
     deleteBackground: {
         position: 'absolute',
@@ -126,7 +120,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'flex-end',
         backgroundColor: '#dc3545',
-        borderRadius: 0,
     },
     deleteText: {
         color: 'white',
@@ -135,7 +128,6 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     card: {
-        borderRadius: 0,
         width: '100%',
     },
 });

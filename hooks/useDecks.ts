@@ -3,14 +3,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
-interface Deck {
+export interface Deck {
   id: string;
   name: string;
-  cardCount: number;
-  createdAt: string;
+  card_count: number;
+  created_at: string;
   // optional fields for sync bookkeeping
   synced?: boolean;
 }
+
+export type DeckCreateBody = {
+  name: string;
+};
+
 
 const STORAGE_KEY = 'flashcardDecks';
 const SYNC_QUEUE_KEY = 'flashcardDecksSyncQueue';
@@ -36,6 +41,7 @@ export function useDecks() {
       // then fetch authoritative decks from server and merge
       await syncManager.fetchAndMerge();
       const newStoredDecks = await AsyncStorage.getItem(STORAGE_KEY);
+      console.log('After fetchAndMerge, storedDecks:', newStoredDecks);
       if (newStoredDecks) {
         setDecks(JSON.parse(newStoredDecks));
       }
@@ -47,14 +53,18 @@ export function useDecks() {
     }
   };
 
-  const saveDeck = async (newDeck: Deck) => {
+  const saveDeck = async (newDeckCreateBody: DeckCreateBody) => {
     try {
+      const newDeck = {
+        id: new Date().toISOString(),
+        name: newDeckCreateBody.name,
+        card_count: 0,
+        created_at: new Date().toISOString(),
+      };
       const updatedDecks = [...decks, newDeck];
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedDecks));
       setDecks(updatedDecks);
-      // Try to sync to server in background; if it fails we enqueue for retry
       enqueueDeckForSync(newDeck).catch(err => {
-        // already handled in enqueue; swallow here but log for debug
         console.debug('enqueueDeckForSync error:', err);
       });
       return true;
@@ -112,8 +122,8 @@ export function useDecks() {
     syncQueueKey: SYNC_QUEUE_KEY,
     getId: (d) => d.id,
     mapServerResponseToId: (resp) => resp?.id ?? resp?.uuid,
-    transformCreateBody: (d) => ({ name: (d as any).name }),
-    transformUpdateBody: (d) => ({ name: (d as any).name, cardCount: (d as any).cardCount, createdAt: (d as any).createdAt }),
+    transformCreateBody: (d): DeckCreateBody => ({ name: d.name }),
+    transformUpdateBody: (d) => ({ name: d.name, card_count: d.card_count, created_at: d.created_at }),
     updateLocalAfterSync: async (localId, updates) => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);

@@ -6,16 +6,9 @@ import { FAB, IconButton, Text } from 'react-native-paper';
 import DeckCard from '@/components/DeckCard';
 import CreateDeckModal from '@/components/modals/CreateDeckModal';
 import SettingsModal from '@/components/modals/SettingsModal';
-import { useDecks } from '@/hooks/useDecks';
+import { DeckCreateBody, useDecks } from '@/hooks/useDecks';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { router } from 'expo-router';
-
-interface Deck {
-  id: string;
-  name: string;
-  cardCount: number;
-  createdAt: string;
-}
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -49,9 +42,9 @@ export default function HomeScreen() {
     setModalVisible(false);
   };
 
-  const handleCreateDeck = async (newDeck: Deck) => {
-    console.log('Creating new deck:', newDeck);
-    const success = await saveDeck(newDeck);
+  const handleCreateDeck = async (deck: DeckCreateBody) => {
+    console.log('Creating new deck:', deck);
+    const success = await saveDeck(deck);
     if (success) {
       setModalVisible(false);
     }

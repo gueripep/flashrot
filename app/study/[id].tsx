@@ -336,8 +336,8 @@ export default function StudyScreen() {
     // Clear any active timer
     clearRevealTimer();
     tickerAudioPlayerRef.current?.stopAudio();
-    
-    
+
+
     setAudioPosition(0);
     setTimingData(null);
     setIsFlipped(!isFlipped);
@@ -352,19 +352,17 @@ export default function StudyScreen() {
 
   // Common function to handle moving to the next card or ending the study session
   const handleNextCardOrComplete = () => {
-    // mainAudioPlayerRef.current?.stopAudio();
+    mainAudioPlayerRef.current?.stopAudio();
     setAudioPosition(0);
+    setIsFlipped(false);
+    setIsLiked(false); // Reset like state for next card
+    clearRevealTimer(); // Clear any active timer
+    setReviewStartTime(null);
     if (isLastCard) {
       setStudyComplete(true);
     } else {
       console.log('🎭 StudyScreen: Moving to next card');
-      // Reset state for next card
-      setIsFlipped(false);
-      setIsLiked(false); // Reset like state for next card
-      clearRevealTimer(); // Clear any active timer
-      setReviewStartTime(null);
       nextCard();
-
     }
   };
 
