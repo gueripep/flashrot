@@ -17,7 +17,7 @@ export default function HomeScreen() {
   const tintColor = useThemeColor({}, 'tint');
   const [modalVisible, setModalVisible] = useState(false);
   const [ttsModalVisible, setSettingsModalVisible] = useState(false);
-  
+
   // Use the custom hook for deck management
   const { decks, loading, saveDeck, deleteDeck } = useDecks();
 
@@ -57,7 +57,7 @@ export default function HomeScreen() {
         <Text variant="headlineSmall" style={{ color: textColor, marginBottom: 20, marginTop: 8 }}>
           My Decks
         </Text>
-        
+
         {loading ? (
           <Text variant="bodyLarge" style={{ color: textColor, textAlign: 'center', marginTop: 50 }}>
             Loading decks...
@@ -68,11 +68,11 @@ export default function HomeScreen() {
           </Text>
         ) : (
           decks.map((deck) => (
-            <DeckCard 
-              key={deck.id} 
+            <DeckCard
+              key={deck.id}
               deck={deck}
               onPress={() => {
-                router.push({ pathname: '/deck/[id]', params: { id: deck.id } })
+                router.push(`/deck/${deck.id}`);
               }}
               onDelete={deleteDeck}
             />

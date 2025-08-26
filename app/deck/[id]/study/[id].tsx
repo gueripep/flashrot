@@ -14,7 +14,7 @@ import { styles } from '@/components/StudyStyles';
 import SubtitleDisplay from '@/components/SubtitleDisplay';
 import { useCards } from '@/hooks/useCards';
 import { Deck, useDecks } from '@/hooks/useDecks';
-import { Rating, useFSRSStudy } from '@/hooks/useFSRSStudy';
+import { Rating, useFSRS } from '@/hooks/useFSRS';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { Stage } from '@/services/fsrsService';
 import { ttsService } from '@/services/ttsService';
@@ -51,7 +51,7 @@ export default function StudyScreen() {
     reviewCard,
     loading: fsrsLoading,
     nextCard
-  } = useFSRSStudy(id || '', cards);
+  } = useFSRS(id, cards);
 
   useLayoutEffect(() => {
     navigation.setOptions({

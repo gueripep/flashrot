@@ -1,4 +1,4 @@
-import { StudyStats } from '@/hooks/useFSRSStudy';
+import { StudyStats } from '@/hooks/useFSRS';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';

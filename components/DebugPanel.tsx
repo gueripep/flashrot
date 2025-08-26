@@ -1,4 +1,4 @@
-import { useFSRSStudy } from '@/hooks/useFSRSStudy';
+import { useFSRS } from '@/hooks/useFSRS';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
@@ -11,7 +11,7 @@ interface DebugPanelProps {
 }
 
 export default function DebugPanel({ deckId, allCards, onRefresh }: DebugPanelProps) {
-  const { debug, refreshData } = useFSRSStudy(deckId, allCards);
+  const { debug, refreshData } = useFSRS(deckId, allCards);
   const [timeTravel, setTimeTravel] = useState('1');
   const [dailyProgress, setDailyProgress] = useState('5');
   

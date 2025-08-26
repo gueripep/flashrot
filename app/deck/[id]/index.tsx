@@ -4,9 +4,9 @@ import FlashCardItem from "@/components/FlashCardItem";
 import StudyStatsCard from "@/components/StudyStatsCard";
 import AddCardModal from "@/components/modals/AddCardModal";
 import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
+import { useFSRSContext } from "@/contexts/FSRSContext";
 import { useCards } from "@/hooks/useCards";
 import { Deck, useDecks } from "@/hooks/useDecks";
-import { useFSRSStudy } from "@/hooks/useFSRSStudy";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { FlashCard } from "@/services/fsrsService";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -45,7 +45,7 @@ export default function DeckScreen() {
     hasCardsForReview,
     loading: fsrsLoading,
     refreshData: refreshFSRSData,
-  } = useFSRSStudy(id, cards);
+  } = useFSRSContext();
 
   const [currentDeck, setCurrentDeck] = useState<Deck | null>(null);
   const [flippedCards, setFlippedCards] = useState<Set<string>>(new Set());
@@ -184,7 +184,7 @@ export default function DeckScreen() {
   const handleStartStudy = (mode: "review" | "all" | "new" = "review") => {
     if (currentDeck && cards && cards.length > 0) {
       router.push({
-        pathname: "/study/[id]",
+        pathname: "/deck/[id]/study/[id]",
         params: {
           id: id,
           mode: mode,

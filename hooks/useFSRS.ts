@@ -27,7 +27,7 @@ export interface StudyModeOptions {
   includeOverdue?: boolean;
 }
 
-export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
+export function useFSRS(deckId: string, allCards: FlashCard[]) {
   const [enhancedCards, setEnhancedCards] = useState<FlashCard[]>([]);
   const [studyCards, setStudyCards] = useState<FlashCard[]>([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);

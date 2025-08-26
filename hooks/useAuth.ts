@@ -24,8 +24,6 @@ interface AuthActions {
     logout: () => Promise<void>;
 }
 
-// ...use service helpers from services/authService
-
 export function useAuth(): AuthState & AuthActions {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
