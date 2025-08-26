@@ -1,10 +1,3 @@
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
-import { ScrollView } from "react-native-gesture-handler";
-import { Button, Card, Chip, FAB, Text } from "react-native-paper";
-
 import DebugPanel from "@/components/DebugPanel";
 import EmptyCardState from "@/components/EmptyCardState";
 import FlashCardItem from "@/components/FlashCardItem";
@@ -12,18 +5,17 @@ import StudyStatsCard from "@/components/StudyStatsCard";
 import AddCardModal from "@/components/modals/AddCardModal";
 import DeleteConfirmationModal from "@/components/modals/DeleteConfirmationModal";
 import { useCards } from "@/hooks/useCards";
-import { useDecks } from "@/hooks/useDecks";
+import { Deck, useDecks } from "@/hooks/useDecks";
 import { useFSRSStudy } from "@/hooks/useFSRSStudy";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { FlashCard } from "@/services/fsrsService";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { Alert, StyleSheet, View } from "react-native";
+import { ScrollView } from "react-native-gesture-handler";
+import { Button, Card, Chip, FAB, Text } from "react-native-paper";
 
-interface Deck {
-  id: string;
-  name: string;
-  cardCount: number;
-  createdAt: string;
-  cards?: FlashCard[];
-}
 
 export default function DeckScreen() {
   // Constants
@@ -47,14 +39,13 @@ export default function DeckScreen() {
     saveCard,
     deleteCard,
     updateCard,
-    refreshCards,
-  } = useCards(id || "");
+  } = useCards(id);
   const {
     studyStats,
     hasCardsForReview,
     loading: fsrsLoading,
     refreshData: refreshFSRSData,
-  } = useFSRSStudy(id || "", cards);
+  } = useFSRSStudy(id, cards);
 
   const [currentDeck, setCurrentDeck] = useState<Deck | null>(null);
   const [flippedCards, setFlippedCards] = useState<Set<string>>(new Set());
@@ -63,6 +54,7 @@ export default function DeckScreen() {
   const [selectedCard, setSelectedCard] = useState<FlashCard | null>(null);
   const [editingCard, setEditingCard] = useState<FlashCard | null>(null);
   const [cardsForReview, setCardsForReview] = useState<boolean>(false);
+  console.log("Rerendering");
 
   const loading = decksLoading || cardsLoading;
 
@@ -76,18 +68,14 @@ export default function DeckScreen() {
   }, [currentDeck, navigation]);
 
   useEffect(() => {
+
     if (id && decks.length > 0) {
       const deck = decks.find((d) => d.id === id);
       if (deck) {
-        // const card = cards.filter((c) => c.deck_id === deck.id);
-        setCurrentDeck({
-          ...deck,
-          cards: cards,
-          cardCount: cards.length,
-        });
+        setCurrentDeck(deck);
       }
     }
-  }, [id, decks, cards]);
+  }, [decks, id]);
 
   // Check for cards due for review
   useEffect(() => {
@@ -99,7 +87,7 @@ export default function DeckScreen() {
     };
 
     checkForReviewCards();
-  }, [id, cards, hasCardsForReview]);
+  }, [id, cards.length, hasCardsForReview, fsrsLoading, studyStats]);
 
   // Refresh stats when returning from study sessions (debounced)
   useFocusEffect(
@@ -272,8 +260,8 @@ export default function DeckScreen() {
                     variant="bodyMedium"
                     style={{ color: textColor, opacity: 0.7 }}
                   >
-                    {currentDeck.cardCount}{" "}
-                    {currentDeck.cardCount === 1 ? "card" : "cards"}
+                    {currentDeck.card_count}{" "}
+                    {currentDeck.card_count === 1 ? "card" : "cards"}
                   </Text>
                 </View>
 
@@ -335,8 +323,8 @@ export default function DeckScreen() {
             Flashcards
           </Text>
           <View style={{ marginBottom: 32 }}>
-            {currentDeck.cards && currentDeck.cards.length > 0 ? (
-              currentDeck.cards.map((card) => (
+            {cards && cards.length > 0 ? (
+              cards.map((card) => (
                 <FlashCardItem
                   key={card.id}
                   card={card}
@@ -369,9 +357,9 @@ export default function DeckScreen() {
         initialCard={
           editingCard
             ? {
-                front: editingCard.final_card.front,
-                back: editingCard.final_card.back,
-              }
+              front: editingCard.final_card.front,
+              back: editingCard.final_card.back,
+            }
             : null
         }
         mode={editingCard ? "edit" : "add"}

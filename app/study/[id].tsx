@@ -13,20 +13,12 @@ import BackgroundVideo, { FullScreenContainer } from '@/components/StudyBackgrou
 import { styles } from '@/components/StudyStyles';
 import SubtitleDisplay from '@/components/SubtitleDisplay';
 import { useCards } from '@/hooks/useCards';
-import { useDecks } from '@/hooks/useDecks';
+import { Deck, useDecks } from '@/hooks/useDecks';
 import { Rating, useFSRSStudy } from '@/hooks/useFSRSStudy';
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { FlashCard, Stage } from '@/services/fsrsService';
+import { Stage } from '@/services/fsrsService';
 import { ttsService } from '@/services/ttsService';
 import { Gesture } from 'react-native-gesture-handler';
-
-interface Deck {
-  id: string;
-  name: string;
-  cardCount: number;
-  createdAt: string;
-  cards?: FlashCard[];
-}
 
 // BackgroundVideo and FullScreenContainer moved to components/StudyBackground
 
@@ -280,8 +272,6 @@ export default function StudyScreen() {
       if (deck) {
         setCurrentDeck({
           ...deck,
-          cards: cards,
-          cardCount: cards.length
         });
       }
     }

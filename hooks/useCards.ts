@@ -154,7 +154,9 @@ export function useCards(deckId: string) {
     const storedCards = await AsyncStorage.getItem(STORAGE_KEY);
     if (storedCards) {
       const parsedCards: FlashCard[] = JSON.parse(storedCards);
+      console.log("Loading cards for deck:", deckId);
       const deckCards = parsedCards.filter((c) => c.deck_id === deckId);
+      console.log("Loaded cards:", deckCards);
       setCards(deckCards);
     }
   };

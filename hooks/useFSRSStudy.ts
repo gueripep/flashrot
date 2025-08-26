@@ -122,12 +122,12 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
 
   const loadStudyStats = useCallback(async () => {
     try {
-      const stats = await fsrsService.getDeckStats(deckId);
+      const stats = await fsrsService.getDeckStats(allCards);
       setStudyStats(stats);
     } catch (error) {
       console.error('Error loading study stats:', error);
     }
-  }, [deckId]);
+  }, [allCards]);
 
   // Load enhanced cards with FSRS data
   useEffect(() => {
@@ -198,7 +198,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
 
       switch (options.mode) {
         case 'review':
-          cardsToStudy = await fsrsService.getCardsForReview(deckId, allCards);
+          cardsToStudy = await fsrsService.getCardsForReview(allCards);
           break;
         case 'new':
           console.log('Getting new cards for today...');
@@ -371,7 +371,7 @@ export function useFSRSStudy(deckId: string, allCards: FlashCard[]) {
    */
   const hasCardsForReview = async (): Promise<boolean> => {
     try {
-      const dueCards = await fsrsService.getCardsForReview(deckId, allCards);
+      const dueCards = await fsrsService.getCardsForReview(allCards);
       return dueCards.length > 0;
     } catch (error) {
       console.error('Error checking for due cards:', error);

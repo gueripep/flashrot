@@ -13,7 +13,6 @@ interface DebugPanelProps {
 export default function DebugPanel({ deckId, allCards, onRefresh }: DebugPanelProps) {
   const { debug, refreshData } = useFSRSStudy(deckId, allCards);
   const [timeTravel, setTimeTravel] = useState('1');
-  const [testCardCount, setTestCardCount] = useState('3');
   const [dailyProgress, setDailyProgress] = useState('5');
   
   const textColor = useThemeColor({}, 'text');

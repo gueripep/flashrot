@@ -147,7 +147,7 @@ class FSRSService {
     /**
      * Get new cards for today with daily limit
      */
-    async getNewCardsForToday(deckId: string, allCards?: any[]): Promise<FlashCard[]> {
+    async getNewCardsForToday(deckId: string, allCards: FlashCard[]): Promise<FlashCard[]> {
         const dailyProgress = await this.getDailyProgress();
         const today = new Date().toDateString();
 
@@ -166,8 +166,8 @@ class FSRSService {
 
         console.log('Daily new cards remaining:', remainingNewCards);
 
-        // Load cards from deck storage instead of using allCards parameter
-        const enhancedCards = await this.loadCardsFromDeck(deckId);
+        // Use provided cards or load from deck storage
+        const enhancedCards = await Promise.all(allCards.map(card => this.enhanceCard(card)));
 
         // Get new cards (reps === 0) that are due
         const now = new Date();
@@ -182,11 +182,11 @@ class FSRSService {
     /**
      * Get cards due for review for a specific deck
      */
-    async getCardsForReview(deckId: string, allCards?: any[]): Promise<FlashCard[]> {
+    async getCardsForReview(allCards: FlashCard[]): Promise<FlashCard[]> {
         const now = new Date();
 
-        // Load cards from deck storage
-        const enhancedCards = await this.loadCardsFromDeck(deckId);
+        // Use provided cards or load from deck storage
+        const enhancedCards = await Promise.all(allCards.map(card => this.enhanceCard(card)));
 
         // Filter cards that are due for review
         const dueCards = enhancedCards.filter(card => {
@@ -202,11 +202,9 @@ class FSRSService {
     /**
      * Get all cards for a deck with FSRS data, sorted by next review date
      */
-    async getAllCardsForDeck(deckId: string, allCards?: any[]): Promise<FlashCard[]> {
-        // Load cards from deck storage
-        const enhancedCards = await this.loadCardsFromDeck(deckId);
-
-        // Sort by due date
+    async getAllCardsForDeck(allCards: FlashCard[]): Promise<FlashCard[]> {
+        // Use provided cards or load from deck storage
+        const enhancedCards = await Promise.all(allCards.map(card => this.enhanceCard(card)));
         enhancedCards.sort((a, b) => a.fsrs.due.getTime() - b.fsrs.due.getTime());
 
         return enhancedCards;
@@ -372,14 +370,16 @@ class FSRSService {
     /**
      * Get study statistics for a deck
      */
-    async getDeckStats(deckId: string): Promise<{
+    async getDeckStats(allCards: FlashCard[]): Promise<{
         totalCards: number;
         newCards: number;
         learningCards: number;
         reviewCards: number;
         dueCards: number;
     }> {
-        const cards = await this.loadCardsFromDeck(deckId);
+        // Use provided cards or load from deck storage
+        console.log('Getting deck stats for cards:', allCards.map(card => card.id));
+        const cards = await Promise.all(allCards.map(card => this.enhanceCard(card)));
         const now = new Date();
 
         let totalCards = 0;
@@ -451,13 +451,6 @@ class FSRSService {
         }
 
         return null;
-    }
-
-    /**
-     * Helper method to get cards from a specific deck (public interface)
-     */
-    async getCardsFromDeck(deckId: string): Promise<FlashCard[]> {
-        return this.loadCardsFromDeck(deckId);
     }
 
     /**

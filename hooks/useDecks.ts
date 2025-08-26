@@ -43,6 +43,7 @@ export function useDecks() {
       const newStoredDecks = await AsyncStorage.getItem(STORAGE_KEY);
       console.log('After fetchAndMerge, storedDecks:', newStoredDecks);
       if (newStoredDecks) {
+        console.log(JSON.parse(newStoredDecks));
         setDecks(JSON.parse(newStoredDecks));
       }
     } catch (error) {
