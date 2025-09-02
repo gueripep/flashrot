@@ -156,7 +156,15 @@ export function useCards(deckId: string) {
       const parsedCards: FlashCard[] = JSON.parse(storedCards);
       console.log("Loading cards for deck:", deckId);
       const deckCards = parsedCards.filter((c) => c.deck_id === deckId);
-      console.log("Loaded cards:", deckCards);
+
+      // Sort cards by due date
+      deckCards.sort((a, b) => {
+        const dateA = new Date(a.fsrs.due);
+        const dateB = new Date(b.fsrs.due);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+      console.log("Loaded and sorted cards:", deckCards);
       setCards(deckCards);
     }
   };
